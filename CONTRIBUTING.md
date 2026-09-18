@@ -17,7 +17,8 @@ It prints its own check count, and lists any group it had to skip because an
 engine library is absent.
 
 **The suite must pass with no engine installed at all.** CI installs only
-`beautifulsoup4` and `requests`, so any import of `playwright_scraper`,
+`requests` (this repo needs no HTML parser — see requirements.txt for the
+measurement), so any import of `playwright_scraper`,
 `puppeteer_scraper` or `selenium_scraper` in a test has to sit inside
 `try/except ImportError` with the skip recorded. This is easy to get wrong
 locally, where you almost certainly have an engine installed and an unguarded

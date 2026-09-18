@@ -16,7 +16,6 @@ authors = [{ name = "2Captcha" }]
 # mirrored in the other by hand. CI's byte-compile + smoke_test.py steps only
 # install requirements.txt, so a drift here would go unnoticed there too.
 dependencies = [
-    "beautifulsoup4>=4.12.0",
     "requests>=2.31.0",
 ]
 

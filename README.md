@@ -136,10 +136,12 @@ python3 playwright_scraper.py --locale en-gb \
 ```
 
 `--mode product` is the one that answers a question a listing cannot: **which
-sizes are in stock**. Measured on `one-pieces`, 2026-09-18: 63 of 180
-products have every size available, **116 have some and not others**, and 1
-is sold out entirely. A listing row says "this style is buyable"; only a
-variant row says which size is.
+sizes are in stock**. On `one-pieces`, **most products are available in some
+sizes and not others** — 63 / 116 / 1 (every size / some / none) out of 180 on
+2026-09-18, and 64 / 115 / 1 the same evening, because it moves as stock
+moves. A listing row says "this style is buyable"; only a variant row says
+which size is. Re-derive rather than trusting the split: count
+`variants_available` against `variants_total` in any run's JSON.
 
 ---
 
@@ -157,7 +159,7 @@ address with no proxy and no key. Re-derive rather than trusting this table
 | `original_price` / `discount_pct` | **45%** (81 of 180), discounts 20–75% |
 | price range | 30.00 – 142.00 USD |
 | in stock (any size) | 179 of 180 |
-| sizes available | all: 63 · some: 116 · none: 1 |
+| sizes available | all / some / none — **the split moves daily**; two runs hours apart gave 63/116/1 and 64/115/1. Count `variants_available` vs `variants_total` |
 
 Pagination, exercised with a smaller page size (at the default `--limit 250`
 most collections fit in one request):

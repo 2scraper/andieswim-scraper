@@ -130,7 +130,7 @@ jobs:
           .venv/bin/pip install -r requirements.txt \
                                 -r requirements-${{ matrix.engine }}.txt
           echo "--- what actually got installed ---"
-          .venv/bin/pip list --format=freeze | grep -iE '^(playwright|pyppeteer|selenium|pyee|urllib3|beautifulsoup4)='
+          .venv/bin/pip list --format=freeze | grep -iE '^(playwright|pyppeteer|selenium|pyee|urllib3|requests)='
 
       - name: The requirements file is self-consistent
         # Passes here precisely BECAUSE each engine has its own venv. Run in a

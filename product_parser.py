@@ -140,12 +140,22 @@ from output_writer import Product
 HOSTS = ("andieswim.com", "www.andieswim.com")
 CANONICAL_HOST = "andieswim.com"
 
-# Both answer.  `www.` 301s to the bare host (checked 2026-09-18), so a URL
-# rebuilt on either spelling reaches the same store — but the canonical host
-# is the bare one and that is what rows carry, so two runs of the same
-# collection cannot differ by a hostname in `url`.  CLAUDE.md §5 warns about
-# the opposite case (a host that does NOT answer on `www.`); here it is the
-# join that matters, not reachability.
+# Both answer, and they answer DIFFERENTLY depending on the route — measured
+# 2026-09-18, after a first version of this comment got it half wrong:
+#
+#   www.andieswim.com/collections/one-pieces               301 -> bare host
+#   www.andieswim.com/collections/one-pieces/products.json 200, stays on www.
+#
+# So the HTML route canonicalises and the JSON routes do not — and the JSON
+# routes are the ones this repo actually fetches. Nothing breaks either way
+# (both spellings serve the same payload), but it is the reason rows are
+# rebuilt on CANONICAL_HOST rather than on whatever the caller typed: without
+# that, two runs of the same collection would differ by a hostname in `url`
+# and every row would read as changed in a diff.
+#
+# CLAUDE.md §5 warns about the opposite case — a host that does NOT answer on
+# `www.` — which is not this site. Here it is the JOIN that matters, not
+# reachability.
 
 # The market prefixes, taken from the site's OWN sitemap index rather than
 # guessed or read off hreflang (§5).  Re-derive with:
@@ -427,6 +437,41 @@ COLLECTIONS_INDEX_PAGE_SIZE = 250
 # first empty page anyway, so the constant only ever bounds a pathological
 # case.
 COLLECTIONS_INDEX_MAX_PAGES = 6
+
+
+def store_products_endpoint(market: Optional[str] = None,
+                            limit: int = 1) -> str:
+    """`/products.json` — the whole store, not one collection.
+
+    Used for two things and neither is a catalogue walk: sampling ONE handle
+    so the run can resolve the market's currency from a document that states
+    it, and (by a caller who wants it) enumerating every published product.
+    Verified 2026-09-18 by walking it: 250 + 250 + 250 + 22 = 772 distinct
+    handles, page 5 empty, a strict superset of the sitemap's 753.
+    """
+    limit = max(1, min(int(limit or 1), MAX_PAGE_SIZE))
+    path = _with_market("/products.json", market)
+    return "https://%s%s?%s" % (CANONICAL_HOST, path,
+                                urlencode({LIMIT_PARAM: limit}))
+
+
+def product_json_endpoint(handle: str, market: Optional[str] = None) -> str:
+    """`/products/{handle}.json` — the sibling of `product_endpoint`.
+
+    NOT what `--mode product` fetches: this document omits `available`
+    entirely, which is the column that mode exists to produce (see
+    `product_endpoint`). It is here because it is the one place the store
+    states a price's CURRENCY beside the price, which is §4's rung 1, and the
+    engines resolve a run's currency from it.
+
+    Kept in this module rather than assembled in each engine: three copies of
+    a URL shape is exactly the drift §1 exists to prevent, and a currency
+    read from a path one engine spelled differently is a silent wrong answer
+    rather than a crash.
+    """
+    return "https://%s%s" % (
+        CANONICAL_HOST,
+        _with_market("/products/%s.json" % (handle,), market))
 
 
 def collections_index_endpoint(page: int = 1,
@@ -969,7 +1014,7 @@ def _availability(product: Dict[str, Any]) -> Tuple[Optional[bool], int, int]:
     `in_stock` is True when ANY variant is available, which is what "can I
     buy this product" means.  It is genuinely a mixed column here rather than
     a constant nobody has seen take its other value (§20): measured on
-    one-pieces, 63 products have every size available, 116 have some, and 1
+    one-pieces, 63 products had every size available, 116 had some, and 1
     has none.
 
     None — not False — when the payload states availability for no variant at

@@ -110,7 +110,7 @@ body:
         Please run and paste:
         ```
         python3 -c "import sys, platform; print(sys.version, platform.platform())"
-        pip list 2>/dev/null | grep -Ei "playwright|pyppeteer|selenium|beautifulsoup4|requests|webdriver"
+        pip list 2>/dev/null | grep -Ei "playwright|pyppeteer|selenium|requests|webdriver"
         python3 smoke_test.py | tail -3
         ```
       render: text

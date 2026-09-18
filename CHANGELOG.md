@@ -51,7 +51,9 @@ keyword lookups, and single products with their full size/colour table.
 - **One collection, fully:** `one-pieces`, 180 rows, `complete`. `title`,
   `price`, `currency`, `image_url`, `handle` and `product_type` at 100%;
   `base_sku` at 91.7%; 81 of 180 reduced (20–75%); 63 products with every
-  size available, 116 with some, 1 with none.
+  size available, 116 with some, 1 with none — a split that moves with stock
+  (64 / 115 / 1 the same evening), so read it as "most products are partly
+  available" rather than as a constant.
 
 ### The captcha on this site
 

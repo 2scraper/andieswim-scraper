@@ -19,8 +19,10 @@ own price and its own availability.
 So `--mode product` emits one row PER VARIANT, not one row per document. A
 seven-size one-piece is seven rows, which is the only shape that can answer
 "is the 2X in stock" — and that is the question the product document exists
-to answer: measured 2026-09-18 on `one-pieces`, 63 of 180 products have every
-size available, **116 have some and not others**, and 1 is sold out entirely.
+to answer: on `one-pieces`, MOST products are available in some sizes and not
+others — 63 / 116 / 1 (every size / some / none) of 180 on 2026-09-18, and
+64 / 115 / 1 the same evening. The split moves with stock; what does not move
+is that the partial bucket is the biggest one.
 `product_id` carries the product's id so the rows fold back together, and
 `sku` holds the VARIANT's own SKU string because rows are variants.
 
@@ -230,8 +232,9 @@ class Product:
     price_max: Optional[float] = None
     price_varies: Optional[bool] = None
     # How many variants the product has, and how many of them can be bought.
-    # The pair is what makes "in stock" actionable: 63 of 180 one-pieces have
-    # every size available, 116 have some, and 1 has none — so a bare
+    # The pair is what makes "in stock" actionable: the MAJORITY of
+    # one-pieces are available in some sizes and not others (63/116/1 of 180
+    # one morning, 64/115/1 that evening — it moves), so a bare
     # `in_stock: true` hides a product down to its last size.
     variants_total: Optional[int] = None
     variants_available: Optional[int] = None

@@ -683,19 +683,16 @@ def _resolve_run_currency(session, args) -> None:
     if getattr(args, "resolved_currency", None):
         return
     market = _market(args)
-    prefix = ("/" + market) if market else ""
     try:
         handle = None
         if args.mode == "product":
             handle = product_parser.handle_from_url(args.url or "")
         if not handle:
-            probe = "https://%s%s/products.json?limit=1" % (
-                product_parser.CANONICAL_HOST, prefix)
+            probe = product_parser.store_products_endpoint(market, limit=1)
             sample = parse_products(_fetch_text(session, probe), probe)
             handle = sample[0].handle if sample else None
         if handle:
-            doc = "https://%s%s/products/%s.json" % (
-                product_parser.CANONICAL_HOST, prefix, handle)
+            doc = product_parser.product_json_endpoint(handle, market)
             code = payload_currency(product_parser.load_payload(
                 _fetch_text(session, doc)))
             if code:
