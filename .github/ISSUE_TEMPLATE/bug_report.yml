@@ -12,24 +12,21 @@ body:
 
         Two things answer most reports faster than we can:
 
-        - **Everything exit 3?** Check the exit address first. Etsy's
-          DataDome answers every datacentre and VPN IP with HTTP 403, so a run
-          from a VPS or a CI runner is blocked whatever else is set. If the
-          log says `t=bv`, a captcha key does not help — that challenge is
-          not solvable. The Scraping Browser API (`--cdp-endpoint`) is the
-          path that works; if a profile keeps refusing after three retries,
-          try a different `pid`.
-        - **Zero products?** You may be on a page that has none — a taxonomy
-          hub, or one page past the end of a listing. It answers 200 with
-          nothing on it, which is exit 4 and a correct answer. See
-          [TROUBLESHOOTING.md](../blob/main/TROUBLESHOOTING.md).
-        - **`rating` empty on every row?** That is expected on a listing run:
-          Etsy publishes no per-listing rating there. The stars you see on a
-          tile are the shop's and are in `shop_rating`. See the README.
-        - **Wrong currency or language?** Etsy decides both from your exit
-          IP, not from the URL — a request for `/fr/…` from a German exit is
-          redirected to `/de/…`. The row's `url` says which storefront
-          actually answered.
+        - **Everything exit 3?** That has never been observed on this store:
+          the README measures every read route answering HTTP 200 from a
+          datacenter address with no key, no proxy and any User-Agent. A
+          refusal would be news — attach the `--dump-html` capture.
+        - **Zero products?** A misspelt collection handle answers HTTP 200
+          with an empty list; the run reports `unknown_collection` for it.
+          A real collection past its last page is also empty, which is exit
+          4 and a correct answer.
+        - **A collection holds fewer rows than `catalog_count`?** Expected.
+          The store's own `products_count` is not a count of products it
+          serves (472 against 180 on `one-pieces`). See the README's
+          "Traps that look like bugs".
+        - **Wrong currency?** Prices are set per market and the market is a
+          path prefix (`/en-gb/…`). Ask for the market in the URL; every row
+          records which one answered.
 
   - type: dropdown
     id: engine
@@ -63,7 +60,7 @@ body:
       label: Exit code
       description: >-
         `echo $?` straight after the run. These mean specific things — 3 is a
-        challenge page, 4 is "ran fine, found nothing", 124 is a self-imposed
+        refusal or challenge page, 4 is "ran fine, found nothing", 124 is a self-imposed
         timeout. The table is in the README.
       placeholder: "4"
     validations:
@@ -77,8 +74,8 @@ body:
       render: shell
       placeholder: |
         python3 playwright_scraper.py \
-          --url "https://www.etsy.com/search?q=handmade+mug" \
-          --pages 3 --out grills
+          --url "https://andieswim.com/collections/one-pieces" \
+          --pages 3
     validations:
       required: true
 
@@ -98,7 +95,7 @@ body:
     attributes:
       label: What you expected instead
       placeholder: >-
-        96 products, as the README says a category page yields.
+        180 products, as the README measured on /collections/one-pieces.
     validations:
       required: true
 
