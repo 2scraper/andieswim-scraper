@@ -521,7 +521,7 @@ def page_url(url: str, page_num: int, limit: int = PAGE_SIZE) -> str:
     handles, no repeats, page 5 empty.
 
     Note what this does NOT do: walking off the end is FREE on this site.
-    Page 5 answers 200 with `{"products":[]}` rather than BBB's 500 (§21), so
+    Page 5 answers 200 with `{"products":[]}` rather than the 500 bbb-scraper's site returns (§21), so
     an overshoot costs a request and manufactures no error.  The terminating
     condition is therefore data — an empty array, or a page that added no new
     id — and never a selector.

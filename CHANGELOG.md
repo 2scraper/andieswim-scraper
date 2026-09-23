@@ -10,6 +10,20 @@ release notes say so at the top.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Donor-repo leftovers removed.** `.gitignore` ignored `montblanc_products.*`
+  and `.dockerignore` excluded `bbb_businesses.*`; both now name this repo's
+  real default output prefix, `andieswim_products`.
+- The issue templates were Etsy's (DataDome advice, an etsy.com example URL,
+  a JSON-LD evidence recipe, a tile-overlay option). Rewritten for this store
+  from the README's own measurements.
+- `captcha_solver.py`'s module docstring and "what is not here" note described
+  BBB's Cloudflare gate as this site's. They now state what the README
+  measured here: only Shopify's form-submit hCaptcha, nothing on the read path.
+- A few comments that said "on BBB" or "BBB has not been measured" as if BBB
+  were this site now name `bbb-scraper` as the sibling it is.
+
 ## [0.1.0] — 2026-09-18
 
 First release. Reads **andieswim.com** (Andie Swim) — collection listings,
