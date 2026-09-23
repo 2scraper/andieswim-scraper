@@ -24,6 +24,11 @@ release notes say so at the top.
 - A few comments that said "on BBB" or "BBB has not been measured" as if BBB
   were this site now name `bbb-scraper` as the sibling it is.
 
+- `SECURITY.md` said this project has no releases or version tags; it has
+  both. "Supported versions" now names the latest release and `main`.
+- `captcha_solver.py`'s docstring pointed at a "No DataDome solver" section
+  that does not exist in this repo (it came with the copied core). Removed.
+
 ## [0.1.0] — 2026-09-18
 
 First release. Reads **andieswim.com** (Andie Swim) — collection listings,
