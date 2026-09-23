@@ -6,15 +6,17 @@ Shared helper used by all three scrapers (Playwright / Selenium / Puppeteer).
 Detection runs after EVERY page navigation in the main loop of all three
 scrapers, regardless of what URL was requested (category hub, product page,
 sign-in, checkout, anything) — this is deliberate, not scoped to any one
-page. If BBB renders a reCAPTCHA challenge anywhere — account, sign-in and
-review-submission flows are the usual places — this fires.
+page. If the store ever renders a challenge on a page this scraper reads,
+this fires.
 
-**BBB's own gate is Cloudflare Turnstile, not reCAPTCHA.** Measured
-2026-09-16: a Managed Challenge carries `cf_chl_opt` and a Turnstile widget,
-and the pages this scraper reads carry no reCAPTCHA at all rather than
-an interstitial. So this module is a contingency, not part of the happy path
-— a bot manager can be switched on between deploys, and a scraper that
-cannot name what stopped it is much harder to fix.
+**Andie Swim gates nothing on the read path.** Measured 2026-09-18 (see the
+README): the only captcha the store ships is Shopify's storefront-forms
+hCaptcha, bound to form SUBMITS (newsletter, contact, account), and no
+listing, product page or JSON route renders one. No reCAPTCHA is loaded —
+`g-recaptcha-response` appears only as a field name inside that Shopify
+bundle. So this module is a contingency, not part of the happy path — a bot
+manager can be switched on between deploys, and a scraper that cannot name
+what stopped it is much harder to fix.
 
 Detection therefore stays BROAD (which challenge a visitor meets depends on
 the exit and on what the address has been doing) while spending stays
@@ -22,8 +24,6 @@ NARROW: `--solve-captcha when-blocked` is the default and counts product
 links before paying, `page_flow.SOLVES_PER_PAGE` caps a page at one
 purchase, and `page_flow.STATE_POLICY` — not this file — decides which state
 is worth money at all.
-
-There is deliberately no DataDome path here. See "No DataDome solver" below.
 
 Flow:
   1. Both detectors run and are reconciled (see reconcile_detections) to decide
@@ -708,25 +708,13 @@ solve_recaptcha_v3 = solve_recaptcha
 # The sibling repo in this family carries a whole second solver for its
 # site's OWN first-party image captcha ("Enter the characters you see below",
 # a JPEG of distorted text and a GET form). Roughly 190 lines of it, and none
-# of it is ported here, because BBB has no such page.
+# of it is ported here, because this store has no such page.
 #
-# What BBB does instead is refuse in two shapes, and only ONE of them is
-# something a solver can answer. Measured 2026-09-16:
-#
-#   "Just a moment..."          a Cloudflare Managed Challenge, ~15 KB, with
-#                               `cf_chl_opt`, `__cf_chl` and a Turnstile
-#                               widget on it. This IS a test, and it is what
-#                               the machinery below is for.
-#   "You have been blocked |    a refusal, ~12.5 KB, with no widget, no
-#    Better Business Bureau(R)"  sitekey and no challenge of any kind. There
-#                               is nothing for a solver to answer.
-#
-# Both answer HTTP 403 and both wear BBB's own branding in the title, so they
-# are told apart structurally rather than by the title —
-# product_parser.detect_page_state reports the first as "challenge" and the
-# second as "blocked", and page_flow.STATE_POLICY spends on the first and
-# never on the second. From a datacenter address it is the second that
-# arrives, and the answer to it is a different exit rather than a purchase.
+# Nor has this store been observed to refuse or challenge at all: no 403, no
+# 429 and no interstitial from any address or User-Agent, measured
+# 2026-09-18 (README, "Do you need any of the paid products?").
+# product_parser.detect_page_state still maps a refusal and a challenge to
+# their own states, and page_flow.STATE_POLICY spends only on the second.
 #
 # The reCAPTCHA / hCaptcha / Turnstile machinery above IS kept, and that is a
 # deliberate asymmetry rather than an inconsistency. Detection stays broad

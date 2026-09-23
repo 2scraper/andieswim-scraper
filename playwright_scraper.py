@@ -350,7 +350,7 @@ def _plan_page_urls(args, page_one_url: str,
     would clamp a correct run against a number that was never right. The end
     is discovered from the data instead (§7 layer 3), and overshooting is
     free: a page past the last one is HTTP 200 with an empty array, not the
-    HTTP 500 the same overshoot produces on BBB.
+    HTTP 500 the same overshoot produces on bbb-scraper's site (§21).
     """
     if not page_flow.pagination_is_addressable(args.url or page_one_url):
         # A product document and a predictive-search lookup are ONE response

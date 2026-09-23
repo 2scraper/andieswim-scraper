@@ -607,7 +607,7 @@ def save(rows: Sequence[Any], out_prefix: str, fmt: str,
 #
 # Walking off the end is free either way: a page past the last one is HTTP
 # 200 with an empty array, not the HTTP 500 the same overshoot produces on
-# BBB. So an overshoot costs one request and manufactures no error.
+# bbb-scraper's site (§21). So an overshoot costs one request and manufactures no error.
 #
 # "single_page_mode" is complete by construction: --mode product reads one
 # page because one page is all there is. Note that it still emits MANY rows
