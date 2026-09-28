@@ -11,8 +11,8 @@
 # the exact output shape without installing anything.
 !sample_output.json
 !sample_output.csv
-montblanc_products.*
-montblanc_products_*.*
+andieswim_products.*
+andieswim_products_*.*
 
 # --- the live-test harness's working directory ---------------------------
 live_results/

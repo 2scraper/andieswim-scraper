@@ -2762,11 +2762,12 @@ def check_shared_calls_bind_against_the_real_signature():
             # A name that is NOT THERE is the loudest possible failure and
             # this check used to swallow it: `getattr(..., None)` returned
             # None, `not callable(None)` was true, and the call was skipped.
-            # Three calls into a page_flow API that does not exist in this
-            # repo -- comparable(), next_page_selector(),
-            # next_page_candidates(), all of them Tokopedia's, all arriving
-            # with copied code -- sat in two engines under a green run of
-            # this very function. Absent is not "nothing to bind".
+            # In a sibling repo (bbb-scraper, CLAUDE.md §22), three calls
+            # into a page_flow API that did not exist there --
+            # comparable(), next_page_selector(), next_page_candidates(),
+            # all of them tokopedia-scraper's, all arriving with copied
+            # code -- sat in two engines under a green run of this very
+            # function. Absent is not "nothing to bind".
             if not hasattr(owner, attr):
                 check("%s.%s exists (called from %s:%d)"
                       % (getattr(owner, "__name__", owner), attr,
@@ -3399,8 +3400,8 @@ def check_every_engine_exposes_the_same_public_surface():
 
 def check_engines_do_not_evaluate_a_string_in_the_browser():
     """§18: a site whose CSP omits `unsafe-eval` kills wait_for_function with
-    an EvalError and takes the run down with exit 1. BBB has not been
-    measured for that, and the cheap habit costs nothing where it would have
+    an EvalError and takes the run down with exit 1. This store has not
+    been measured for that, and the cheap habit costs nothing where it would have
     been allowed."""
     for module in ENGINES:
         path = os.path.join(HERE, module + ".py")
@@ -3609,8 +3610,8 @@ def check_captcha_capability_claims_match_the_code():
 
     # The pairing that matters ON THIS SITE.
     #
-    # The sibling repo pins "the README must say TurnstileTaskProxyless is
-    # not built here", because BBB renders Cloudflare Managed Challenges and
+    # The sibling bbb-scraper pins "the README must say TurnstileTaskProxyless
+    # is not built here", because its site renders Cloudflare Managed Challenges and
     # a reader could reasonably expect a key to clear one. This store renders
     # no challenge on any READ path — the only captcha it ships is Shopify's
     # storefront-forms hCaptcha, bound to form submits — so the equivalent
