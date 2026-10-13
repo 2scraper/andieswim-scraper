@@ -335,6 +335,14 @@ STATE_POLICY = {
     # Not recognisably a page or payload this store serves. A wait, not a
     # spend.
     "unknown":   {"retry": True,  "solve": False, "blocked": False, "parse": False},
+    # The edge asked us to slow down (HTTP 429, or a 5xx). RETRY, but NOT as
+    # a block: §24's lesson is that a throttle and a refusal want opposite
+    # responses — a throttle wants a wait at the SAME exit, a refusal wants a
+    # different one. `blocked` is False so the run does not report exit 3 and
+    # send a reader to buy a proxy they do not need; the wait comes from
+    # `throttle_pause()` and has its own budget, so it does not eat
+    # `--retries`, which is the user's budget for transient faults.
+    "throttled": {"retry": True,  "solve": False, "blocked": False, "parse": False},
     # The store answered "this route is not here" — a 404 page, or a 404 with
     # a zero-byte body on a JSON route. RETRYING IS WRONG: the address is
     # not going to start existing, and three retries on a typo turn an
@@ -385,6 +393,41 @@ RETRY_ON_BLOCKED = True
 # per remaining exit instead, because there the retry changes the one
 # variable the refusal depends on.
 BLOCK_RETRIES_WITHOUT_POOL = 1
+
+# How long to wait when the edge throttles, and how many times.
+#
+# Separate from `--retries` on purpose (§24). A throttle is not a transient
+# fault: re-asking immediately is what caused it, so spending the user's
+# retry budget on it both fails and makes the cause worse.
+#
+# The edge states the wait when it knows one — Cloudflare sent
+# `Retry-After: 60` on the one observation this store has produced — and
+# `Retry-After` is the site talking, so it wins over anything chosen here
+# (§8: never present a guess as a fact when the site states it). The cap
+# exists because a header is not a promise: a 3600 would otherwise hang a
+# run for an hour with no output.
+THROTTLE_WAITS = 2
+THROTTLE_PAUSE_S = 5.0
+THROTTLE_PAUSE_CAP_S = 120.0
+
+
+def throttle_pause(retry_after=None, attempt: int = 1) -> float:
+    """Seconds to wait before re-asking a throttled address.
+
+    `retry_after` is whatever the response's header held — a string, an int,
+    or None. A header that cannot be read as a number is IGNORED rather than
+    guessed at, and the backoff is used instead.
+    """
+    try:
+        if retry_after is not None:
+            stated = float(str(retry_after).strip())
+            if stated > 0:
+                return min(stated, THROTTLE_PAUSE_CAP_S)
+    except (TypeError, ValueError):
+        pass
+    return min(THROTTLE_PAUSE_S * (2 ** max(0, attempt - 1)),
+               THROTTLE_PAUSE_CAP_S)
+
 
 # At most one solve per page. A challenge that survives a solved token is not
 # a challenge this run can pass, and a second solve is a second charge for

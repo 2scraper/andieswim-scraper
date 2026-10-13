@@ -26,6 +26,65 @@ release notes say so at the top.
   `page_flow.attempts` in every entry point; a check reads the source of each
   one and calls the validator, so a new engine declaring the flag with a
   plain int fails the suite.
+- **The navigation's HTTP status now reaches the classifier.** `page.goto()`
+  returns a Response and all three engines threw it away, so the status was
+  never available to `detect_page_state()` — which does know what to do with
+  one. A `429` from this edge is 18 bytes of plain text: not one of the
+  store's payloads, not a page built out of its assets, so without the status
+  it classified as `unknown`, waited the full 30-second readiness budget, and
+  then retried — the one response a throttle must not get quickly.
+- **`429` and `5xx` are now a `throttled` state of their own**, not a block
+  and not an unknown. A throttle wants a wait at the SAME exit; a refusal
+  wants a different one, and conflating them spends a rotation and reports
+  exit 3 to a reader who needs no proxy at all. The wait honours the edge's
+  own `Retry-After` (capped at 120 s), comes out of a budget of its own so it
+  does not eat `--retries`, and a run still throttled afterwards reports a
+  rate limit rather than an empty catalogue.
+  - Selenium is the exception and says so in place: the WebDriver protocol
+    exposes no response status, so that engine binds an explicit `None` and
+    reaches `throttled` through the edge's own body wording instead — one
+    rung weaker, and the only rung it has.
+
+### Changed
+
+- **Confirming a collection exists costs ONE request instead of five.** The
+  check used to walk `/collections.json?limit=250` to the end — 834
+  collections, four full pages plus the empty one, about a megabyte — on
+  every run, including every run that was never going to need the answer.
+  Measured 2026-10-13: **7 preflight requests to fetch one page of 5
+  products; now 3.**
+  `/collections/{handle}.json` answers the same question in 536 bytes and
+  answers it better: a walk could only ever report "not among the ones I
+  managed to read", while a 404 with zero bytes is the store saying the route
+  is not there. `products_count` comes back in the same response, so
+  `catalog_count` costs nothing extra.
+- **CI tests 3.9 and 3.13**, the oldest and newest supported, rather than 3.9
+  and 3.12. The badge claimed 3.13 and nothing tested it.
+- **The README's "nothing is gated" is re-scoped and re-dated.** It now says
+  what it is entitled to — this store does not gate reads — and records the
+  Cloudflare per-colo rate limit a third-party audit met (`429`,
+  `local_rate_limited`, `Retry-After: 60`), together with the fact that it
+  did not reproduce from here: 30 requests in 5.9 s all 200.
+
+### A note on the audit that prompted this
+
+Its headline was that a run had met a rate limit and reported it as an empty
+catalogue. The run had not met one. The audit's command carried `--retries 0`,
+which makes the page-load loop `range(1, 1)` — empty — so no navigation
+happened at all and the engine judged whatever the browser still held.
+
+What it held was the tail of the preflight: `{"collections":[]}`, the last
+page of the collection-index walk. That is **18 bytes**. `local_rate_limited`
+is **also exactly 18 bytes**, and the audit's later direct `curl` did see a
+`429` — so the two numbers matched and the inference looked confirmed.
+Reproduced here with `--dump-html`: the file is `{"collections":[]}`.
+
+Both defects it named are real and both are fixed above, which is the useful
+half. `--retries 0` itself is handled separately in #6.
+
+
+
+### Fixed
 
 - **The Scraper API path (`scraper_api_client.py`) failed whenever a wait flag
   was given, and never saw the target's status.** Measured 2026-09-23 against
