@@ -43,8 +43,21 @@ fingerprint:
 | the same, **no `User-Agent` header at all** | HTTP 200 |
 | 20 requests in 4.9 s | 20 × HTTP 200 |
 
-Nothing is gated, no rate limiting was observed, and no challenge has ever
-appeared on any capture. Saying so is worth more than a pitch.
+Nothing is gated and no challenge has ever appeared on any capture.
+
+**One qualification, added 2026-10-13 and worth the sentence.** A third-party
+audit hit Cloudflare's own per-colo rate limit on this endpoint —
+`HTTP 429`, 18 bytes of `local_rate_limited`, `Retry-After: 60`. It was not
+reproducible from here that day (30 requests in 5.9 s all answered 200, and a
+3-page run was `complete`), so it is an edge condition rather than a policy
+the store applies to everyone. The scraper now recognises it as a THROTTLE —
+it waits at the same exit rather than reporting a block, because a different
+address would not help — and a run still holding nothing reports a rate
+limit, never an empty catalogue.
+
+So read the table as "this store does not gate reads", not as "you cannot be
+rate limited". Re-derive it rather than trusting it (CLAUDE.md §13): the
+commands are one `curl` each.
 
 **What the 2Captcha products actually buy here**, which is real but narrow:
 

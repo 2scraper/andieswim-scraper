@@ -45,8 +45,10 @@ right.
     SEARCH          /search/suggest.json: one ordinary result and one
                     genuinely reduced one, so the "0.00 means absent"
                     sentinel is exercised in both directions.
-    COLLECTIONS_INDEX  two entries of the store's 830, including the
-                    `products_count` that is NOT a product count.
+    COLLECTION_DOC  `/collections/one-pieces.json` — the document that
+                    replaced a five-request walk of the collection index,
+                    carrying the `products_count` that is NOT a product
+                    count.
 
 Nothing here is HTML, and that is the site rather than a shortcut: a
 collection page serves no product grid and a product page publishes no
@@ -1594,24 +1596,30 @@ SEARCH = r'''
 }
 '''
 
-COLLECTIONS_INDEX = r'''
+# `/collections/{handle}.json`, captured 2026-10-13. The document that
+# replaced a five-request walk of the whole collection index: it answers
+# "does this handle exist" exactly (a 404 with zero bytes when it does
+# not) and carries `products_count` in the same response.
+COLLECTION_DOC = r'''
 {
- "collections": [
-  {
-   "handle": "one-pieces",
-   "id": 270871035976,
-   "title": "One Pieces",
-   "products_count": 472
+ "collection": {
+  "id": 152674664518,
+  "title": "One Pieces",
+  "handle": "one-pieces",
+  "description": "<p class=\"p1\" data-mce-fragment=\"1\">One piece swimsuits for whatever fit you're feeling.</p>",
+  "published_at": "2019-10-15T05:27:26-04:00",
+  "updated_at": "2026-10-13T07:13:40-04:00",
+  "image": {
+   "id": 1667372417096,
+   "created_at": "2023-04-12T08:49:01-04:00",
+   "src": "https://cdn.shopify.com/s/files/1/0024/2289/8758/collections/12.jpg?v=1719955097",
+   "alt": "woman wearing a blue swimsuit on the beach"
   },
-  {
-   "handle": "bikinis",
-   "id": 270871003208,
-   "title": "Bikinis",
-   "products_count": 237
-  }
- ]
+  "products_count": 472
+ }
 }
 '''
+
 
 
 # The three HTML fixtures. Nothing this repo depends on comes out of markup —
@@ -1909,24 +1917,38 @@ def check_an_empty_listing_is_not_a_missing_one():
     `/collections/does-not-exist/products.json` answers HTTP 200 with
     `{"products": []}` — only the HTML route 404s. So "no rows" alone cannot
     say whether the collection is empty or the handle was mistyped, and the
-    engines check the store's own index before reporting either.
+    engines ask the store directly before reporting either.
+
+    That question used to be answered by walking the whole collection index
+    (834 collections, four pages of 250 plus an empty one) on EVERY run.
+    `/collections/{handle}.json` answers it in one 536-byte request, and
+    answers it BETTER: a walk could only report "not among the ones I
+    managed to read", while a 404 is the store saying the route is not there.
     """
-    from product_parser import (parse_collections_index, catalog_count_for,
-                                collection_is_published, detect_page_state)
-    index = parse_collections_index(COLLECTIONS_INDEX)
-    equal("index parses", sorted(index), ["bikinis", "one-pieces"])
-    equal("a published handle is known",
-          collection_is_published(index, "one-pieces"), True)
-    equal("an unknown handle is reported as unknown",
-          collection_is_published(index, "does-not-exist"), False)
-    equal("an EMPTY index answers None, not False — unknown is not absent",
-          collection_is_published({}, "one-pieces"), None)
-    equal("the store's own count is carried",
-          catalog_count_for(index, "one-pieces"), 472)
-    equal("and it is absent for a handle the index does not have",
-          catalog_count_for(index, "nope"), None)
+    from product_parser import (collection_endpoint, parse_collection,
+                                detect_page_state)
+    equal("the endpoint is the collection's own address",
+          collection_endpoint("one-pieces"),
+          "https://andieswim.com/collections/one-pieces.json")
+    equal("...and it carries the market prefix",
+          collection_endpoint("one-pieces", "en-gb"),
+          "https://andieswim.com/en-gb/collections/one-pieces.json")
+
+    published = parse_collection(COLLECTION_DOC)
+    check("a published collection parses", published is not None)
+    equal("...and states its handle", (published or {}).get("handle"),
+          "one-pieces")
+    equal("...and the store's own count, with no extra request",
+          (published or {}).get("products_count"), 472)
+
+    # A 404 on this route has a ZERO-BYTE body, which is the whole signal.
+    equal("a 404's empty body is not a collection", parse_collection(""), None)
+    equal("neither is an unrelated payload",
+          parse_collection('{"products": []}'), None)
     equal("an empty listing payload is `empty`, never `blocked`",
           detect_page_state('{"products": []}', 200, "")[0], "empty")
+    equal("and a 404 on a JSON route is not_found, not empty",
+          detect_page_state("", 404, "")[0], "not_found")
 
 
 def check_catalog_count_is_never_planned_from():
@@ -2025,7 +2047,7 @@ def check_page_and_position_are_threaded_through():
 
 def check_url_building_and_pagination():
     from product_parser import (listing_endpoint, page_url, product_endpoint,
-                                search_endpoint, collections_index_endpoint,
+                                search_endpoint, collection_endpoint,
                                 page_number_from_url, is_endpoint_url)
     equal("listing endpoint for page 1",
           listing_endpoint(LISTING_URL, 1),
@@ -2054,8 +2076,8 @@ def check_url_building_and_pagination():
           in search_endpoint("x", market="en-gb"))
     equal("page number round-trips",
           page_number_from_url(page_url(LISTING_URL, 7)), 7)
-    check("the collections index is an endpoint too",
-          is_endpoint_url(collections_index_endpoint()))
+    check("a collection's own document is an endpoint too",
+          is_endpoint_url(collection_endpoint("one-pieces")))
     for u, want in ((LISTING_URL, False),
                     (listing_endpoint(LISTING_URL, 1), True),
                     (product_endpoint(PRODUCT_URL), True),
@@ -2244,8 +2266,20 @@ def check_page_states_on_real_payloads():
           detect_page_state(CHALLENGE_HTML, 403, "")[0], "captcha")
     equal("and it names the vendor",
           detect_page_state(CHALLENGE_HTML, 403, "")[1], "cloudflare")
-    equal("a 503 is retryable, not blocked",
-          detect_page_state("<html/>", 503, "")[0], "unknown")
+    equal("a 503 is a THROTTLE — wait at the same exit, do not rotate",
+          detect_page_state("<html/>", 503, "")[0], "throttled")
+    equal("and so is a 429", detect_page_state("", 429, "")[0], "throttled")
+    check("a throttle is NOT reported as blocked",
+          not __import__("page_flow").counts_as_blocked("throttled"),
+          "exit 3 would send a reader to buy a proxy that cannot help")
+    check("a throttle does not pay a solver",
+          not __import__("page_flow").should_solve("throttled"))
+    # The body alone, for the engine that has no status to read: Selenium
+    # exposes none, so without this a 429 reaches it as 18 bytes of plain
+    # text and classifies as `unknown` — which retries at once, which is the
+    # one response a throttle must not get.
+    equal("the edge's own throttle body is enough without a status",
+          detect_page_state("local_rate_limited", None, "")[0], "throttled")
     # §18's inverted case: Chromium's own error page carries the site's
     # HOSTNAME in its title and none of its assets, so a title check calls it
     # a real page.
@@ -2862,6 +2896,88 @@ FAMILY_FLAGS = {"--fingerprint", "--fp-tags", "--fp-country", "--locale",
 # omitted, because the sibling repo this code came from ships one.
 SITE_FLAGS = {"--query", "--limit"}
 
+
+def check_the_navigation_status_reaches_the_classifier():
+    """The status is the only unambiguous signal some answers carry.
+
+    A 429 from this edge is 18 bytes of plain text. It is not one of the
+    store's payloads and not a page built out of the store's assets, so
+    WITHOUT the status it classifies as `unknown` — which waits the full
+    readiness budget and then retries, which is the one response a throttle
+    must not get quickly. With it, `throttled`.
+
+    `page.goto()` RETURNS the Response and the first version of these engines
+    threw it away. A third-party audit named that in October 2026. Its own
+    evidence for it was a different bug (see CHANGELOG), and the defect was
+    real anyway.
+
+    **Selenium is exempt from keeping a Response and is NOT exempt from
+    passing a status**, which is the distinction worth pinning rather than
+    papering over (§10: pin a known limitation). `driver.get()` returns None
+    and the WebDriver protocol carries no status, so that engine binds an
+    explicit `None` and leans on the body marker instead. If it ever grows a
+    status, this check is where the exemption is written down.
+
+    Reads the SOURCE rather than calling anything, because the branch that
+    matters runs only against a live edge — and deliberately NOT gated behind
+    importing the engine, so it still runs for an engine whose driver is
+    absent from this venv (§22).
+    """
+    # Which engines can even have one. Keyed on the driver's API, not on a
+    # name, so a new engine has to be classified deliberately.
+    CANNOT_READ_A_STATUS = {"selenium_scraper"}
+
+    for module in ENGINES:
+        path = os.path.join(HERE, module + ".py")
+        if not os.path.exists(path):
+            continue
+        source = open(path, encoding="utf-8").read()
+        tree = ast.parse(source)
+
+        if module in CANNOT_READ_A_STATUS:
+            # Normalised, because a comment that wraps is still the same
+            # sentence — a check keyed on where a line happens to break is a
+            # check someone silences by reflowing a paragraph.
+            prose = re.sub(r"\s*#\s*", " ", source)
+            prose = re.sub(r"\s+", " ", prose)
+            check("%s says WHY it has no status to pass" % (module,),
+                  "exposes no response status" in prose,
+                  "the exemption has to carry its reason, or the next reader "
+                  "fixes it by inventing one")
+        else:
+            kept = [n for n in ast.walk(tree)
+                    if isinstance(n, ast.Assign) and "goto" in ast.dump(n.value)]
+            check("%s keeps the Response that goto() returns" % (module,),
+                  kept, "goto() is called for its side effect only, so the "
+                        "HTTP status is thrown away")
+
+        # Every classify call must be GIVEN a status, by either name and in
+        # either spelling — the engines reach the classifier two ways.
+        bare = []
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            name = getattr(node.func, "id", None) or getattr(node.func, "attr", None)
+            if name not in ("_classify", "classify"):
+                continue
+            if any(k.arg == "status" for k in node.keywords):
+                continue
+            # `classify(html, status, url)` and `_classify(page, html, status)`
+            # both put it third.
+            if len(node.args) >= 3 and not (
+                    isinstance(node.args[1], ast.Constant)
+                    and node.args[1].value is None):
+                if isinstance(node.args[2], ast.Constant) and node.args[2].value is None:
+                    bare.append(node.lineno)
+                continue
+            if len(node.args) >= 3:
+                bare.append(node.lineno)
+                continue
+            bare.append(node.lineno)
+        check("%s passes a status to every classify() call" % (module,),
+              not bare,
+              "line(s) %s classify with no status — a 429 there reads as "
+              "`unknown` and is retried instead of waited out" % (bare,))
 
 def check_engine_flag_sets():
     """§17's check #2: against the contract AND against each other, both ways.

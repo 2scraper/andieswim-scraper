@@ -65,9 +65,10 @@ them is in `/products.json`'s 772, a strict superset with zero misses.
 A bogus collection handle answers **HTTP 200 with an empty list**, not 404 —
 `/collections/does-not-exist/products.json` returns `{"products":[]}`.  Only
 the HTML route 404s.  So "no rows" cannot be read as "empty collection"
-without checking the handle exists, which `collection_is_published()` does
-against the collection index, and which is why this repo distinguishes
-`unknown_collection` from `empty` in its stop reasons (§20).
+without checking the handle exists.  `/collections/{handle}.json` answers
+that in one request — 200 with a `products_count`, or a 404 with zero bytes —
+which is why this repo distinguishes `unknown_collection` from `empty` in its
+stop reasons (§20).
 
 Options are not positional.  `variants[].option1/2/3` are commonly Color and
 Size, but the store also ships `Rate`, `Length`, `Quantity`, `SPF`,
@@ -426,17 +427,54 @@ def search_endpoint(query: str, limit: int = 10,
 
 SEARCH_MAX_RESULTS = 10
 
-COLLECTIONS_INDEX_PAGE_SIZE = 250
+def collection_endpoint(handle: str, market: Optional[str] = None) -> str:
+    """`/collections/{handle}.json` — ONE collection, by name.
 
-# How far the collection index is walked before a handle is called absent.
-#
-# 830 collections on 2026-09-18, which is four pages of 250 — so a single
-# page would declare two thirds of the store's own collections unknown and
-# turn every run on one of them into a spurious `unknown_collection` warning.
-# Six is headroom for the store growing, and the walk stops early on the
-# first empty page anyway, so the constant only ever bounds a pathological
-# case.
-COLLECTIONS_INDEX_MAX_PAGES = 6
+    This replaced a walk of the whole collection index, and the saving is the
+    point: the index pages at 250, the store publishes 834 collections, so
+    answering "does this handle exist" by walking it cost **five requests and
+    about a megabyte on every run**, including every run that was never going
+    to need the answer. Measured 2026-10-13: 7 preflight requests to fetch
+    one page of 5 products.
+
+    This endpoint answers the same question exactly and unambiguously in 536
+    bytes:
+
+        /collections/one-pieces.json          HTTP 200, products_count 472
+        /collections/does-not-exist.json      HTTP 404, ZERO bytes
+
+    Note the 404, which is what makes it better rather than merely cheaper.
+    The index walk could only ever report "the handle was not among the ones
+    I managed to read", so a truncated walk and a missing collection looked
+    the same. Here the store says outright that the route is not there — and
+    it is the only route on this store that says so about a collection, since
+    `/collections/{bogus}/products.json` answers 200 with an empty list.
+
+    It carries `products_count` too (472 for one-pieces, byte-identical to
+    the index's figure), so the sidecar keeps `catalog_count` with no extra
+    request — still NOT a count of products the storefront serves, and still
+    planned from by nothing.
+    """
+    market = market or None
+    return "https://%s%s" % (
+        CANONICAL_HOST,
+        _with_market("/collections/%s.json" % (handle,), market))
+
+
+def parse_collection(text: str) -> Optional[Dict[str, Any]]:
+    """The collection object from `/collections/{handle}.json`, or None.
+
+    None means "the store did not answer with a collection" — a 404's empty
+    body, or anything else. It deliberately does NOT distinguish "absent"
+    from "unreadable" on its own: the caller has the HTTP status, which is
+    the signal that separates them, and inventing the distinction here would
+    be guessing from a shape (§8).
+    """
+    payload = load_payload(text)
+    if not isinstance(payload, dict):
+        return None
+    collection = payload.get("collection")
+    return collection if isinstance(collection, dict) else None
 
 
 def store_products_endpoint(market: Optional[str] = None,
@@ -472,15 +510,6 @@ def product_json_endpoint(handle: str, market: Optional[str] = None) -> str:
     return "https://%s%s" % (
         CANONICAL_HOST,
         _with_market("/products/%s.json" % (handle,), market))
-
-
-def collections_index_endpoint(page: int = 1,
-                               market: Optional[str] = None) -> str:
-    path = _with_market("/collections.json", market)
-    return "https://%s%s?%s" % (
-        CANONICAL_HOST, path,
-        urlencode({LIMIT_PARAM: COLLECTIONS_INDEX_PAGE_SIZE,
-                   PAGE_PARAM: max(1, int(page or 1))}))
 
 
 def endpoint_for(url: str, page: int = 1, limit: int = PAGE_SIZE) -> str:
@@ -1322,45 +1351,6 @@ def payload_is_cents(payload: Any) -> bool:
 # The collection index — what makes "empty" distinguishable from "wrong"
 # ---------------------------------------------------------------------------
 
-def parse_collections_index(text: str) -> Dict[str, Dict[str, Any]]:
-    """`{handle: {...}}` from one page of `/collections.json`.
-
-    830 collections on 2026-09-18, over 4 pages of 250.
-    """
-    payload = load_payload(text)
-    if not isinstance(payload, dict):
-        return {}
-    out: Dict[str, Dict[str, Any]] = {}
-    for c in payload.get("collections") or []:
-        if isinstance(c, dict) and _text(c.get("handle")):
-            out[str(c["handle"]).lower()] = c
-    return out
-
-
-def collection_is_published(index: Dict[str, Dict[str, Any]],
-                            handle: Optional[str]) -> Optional[bool]:
-    """Whether the store publishes this collection handle.
-
-    None when the index is empty — unknown is not False.  This is the check
-    that lets a zero-row run say `unknown_collection` instead of `empty`: the
-    JSON endpoint answers a misspelt handle with HTTP 200 and an empty list,
-    so without it every typo reports a successfully-scraped empty category
-    (§20).
-    """
-    if not index:
-        return None
-    return (handle or "").lower() in index
-
-
-def catalog_count_for(index: Dict[str, Dict[str, Any]],
-                      handle: Optional[str]) -> Optional[int]:
-    entry = index.get((handle or "").lower())
-    if not entry:
-        return None
-    n = entry.get("products_count")
-    return int(n) if isinstance(n, int) else None
-
-
 # ---------------------------------------------------------------------------
 # Classification inputs
 # ---------------------------------------------------------------------------
@@ -1516,7 +1506,26 @@ def product_link_count(html: str) -> int:
 _NOT_FOUND_RE = re.compile(r'class="layout\s+layout--404\b'
                            r'|id="shopify-section-template--[0-9]+__404"')
 
-_REFUSAL_STATUSES = frozenset({401, 403, 407, 429, 451})
+_REFUSAL_STATUSES = frozenset({401, 403, 407, 451})
+
+# A THROTTLE is not a refusal, and the two want opposite responses (§24): a
+# throttle wants a wait at the SAME exit, a refusal wants a different one.
+# Counting 429 as blocked spends the block budget and a rotation on a page
+# that was about to come back, and reports exit 3 to a reader who needs no
+# proxy at all.
+#
+# Observed on this store 2026-10-13 by a third-party audit — Cloudflare's own
+# `local_rate_limited`, 18 bytes, with `Retry-After: 60`. NOT reproduced from
+# here that day: 30 requests in 5.9 s all answered 200, and a 3-page run was
+# `complete`. So it is a real state of the edge rather than a property of the
+# store's own rate policy, and it is handled rather than advertised.
+_THROTTLE_STATUSES = frozenset({429, 503})
+
+# Cloudflare's body for a per-colo rate limit. Kept as a SECONDARY signal
+# only: the status is what decides, and this is what lets an engine with no
+# status (Selenium) reach the same verdict. Counted on pages this store is
+# known to serve: 0 occurrences across every capture.
+_THROTTLE_MARKERS = ("local_rate_limited", "rate limited", "too many requests")
 _SERVER_ERROR_STATUSES = frozenset({500, 502, 503, 504})
 
 
@@ -1536,7 +1545,7 @@ def detect_page_state(text: str, status: Optional[int] = None,
     real answer: a misspelt collection handle produces exactly the same
     document.  Telling those two apart needs the collection index, which this
     function does not have and should not fetch, so the engines do it — see
-    `collection_is_published`.  What this function guarantees is that the
+    `collection_endpoint`.  What this function guarantees is that the
     engines are never handed a false `blocked` to explain.
     """
     text = text or ""
@@ -1569,22 +1578,35 @@ def detect_page_state(text: str, status: Optional[int] = None,
     if status is not None:
         if status == 404:
             return "not_found", "HTTP 404"
+        if status in _THROTTLE_STATUSES:
+            # Wait, do not rotate, and do not solve. §24: a throttle is the
+            # one refusal whose right answer is patience at the same address.
+            return "throttled", "HTTP %d" % status
         if status in _REFUSAL_STATUSES:
             vendor = detect_bot_challenge(text, url)
             return ("captcha" if vendor else "blocked"), (vendor or "HTTP %d" % status)
         if status in _SERVER_ERROR_STATUSES:
-            # Retryable, and NOT blocked: a 503 from Shopify is Shopify, and
+            # Retryable, and NOT blocked: a 5xx from Shopify is Shopify, and
             # spending a solve or a rotation on it buys nothing.
             return "unknown", "HTTP %d" % status
 
-    # 4. A vendor marker.  Only consulted once the positive signals have
+    # 4. A throttle body, for the engine that has no status to read.
+    #    Selenium exposes none, so without this a 429 reaches it as 18 bytes
+    #    of plain text and classifies as `unknown` — which RETRIES, which is
+    #    the one thing a throttle must not do quickly.
+    low = text[:_UNESCAPE_PREFIX].lower()
+    for marker in _THROTTLE_MARKERS:
+        if marker in low:
+            return "throttled", marker
+
+    # 5. A vendor marker.  Only consulted once the positive signals have
     #    failed (§18): running it earlier lets it fire on a page the store
     #    plainly served and turn a correct answer into exit 3.
     vendor = detect_bot_challenge(text, url)
     if vendor:
         return "captcha", vendor
 
-    # 5. An HTML document built out of the store's own assets is a page the
+    # 6. An HTML document built out of the store's own assets is a page the
     #    store served — it just is not one of the JSON routes.  That is the
     #    `--mode product` HTML capture, and it is also what tells Chromium's
     #    own network-error page (which carries the site's HOSTNAME in its

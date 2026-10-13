@@ -17,7 +17,12 @@ jobs:
       matrix:
         # 3.9 is the floor the README claims. Claiming it without testing it is
         # how a walrus operator or a `X | None` annotation ships and breaks it.
-        python-version: ["3.9", "3.12"]
+        # The oldest and the NEWEST supported, not the oldest and a
+        # convenient middle. The README's badge claimed 3.9-3.13 while CI
+        # tested 3.9 and 3.12, so the newest end of the claim was untested —
+        # which is the same defect as claiming 3.9 without testing it (§11),
+        # pointed at the other end of the range.
+        python-version: ["3.9", "3.13"]
 
     steps:
       - uses: actions/checkout@v4

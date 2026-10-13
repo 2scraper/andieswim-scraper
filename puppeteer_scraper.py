@@ -129,11 +129,11 @@ import product_parser
 from product_parser import (DEFAULT_LOCALE, DEFAULT_MODE, PAGE_SIZE,
                             VERIFIED_MARKETS,
                             collection_from_url, collection_url,
-                            collections_index_endpoint, detect_bot_challenge,
+                            collection_endpoint, detect_bot_challenge,
                             is_endpoint_url, is_product_url, is_supported_url,
                             listing_endpoint, locale_from_url,
                             market_is_well_formed, page_url,
-                            parse_collections_index, parse_listing,
+                            parse_collection, parse_listing,
                             parse_product_detail, parse_products,
                             payload_currency, product_link_count,
                             product_url, references_own_assets,
@@ -806,20 +806,36 @@ def _resolve_run_currency(session, args) -> None:
     args.currency_source = None
 
 def _resolve_collection_index(session, args) -> None:
-    """Fetch the store's collection index, so "empty" can be told from "wrong".
+    """Confirm the collection exists, in ONE request, before anything else.
 
     `/collections/does-not-exist/products.json` answers **HTTP 200 with
-    `{"products": []}`** — only the HTML route 404s. So a zero-row run is
-    ambiguous on the document alone, and without this check every mistyped
-    handle reports a successfully-scraped empty category, which is exactly
-    the §20 failure that sends a reader to check their proxy instead of their
-    spelling.
+    `{"products": []}`** — only the HTML route 404s — so a zero-row run is
+    ambiguous on the listing document alone, and without this check every
+    mistyped handle reports a successfully-scraped empty collection. That is
+    the §20 failure this costs one request to avoid.
 
-    One request, and only for a listing run. It also carries back
-    `products_count` for the sidecar — with the warning attached, because it
-    is NOT a count of products the storefront serves.
+    ONE request, and it used to be five. The first version walked
+    `/collections.json?limit=250` until a page came back empty, because that
+    is the endpoint the store's own front end uses to enumerate collections —
+    834 of them, so four full pages plus the empty one, about a megabyte, on
+    EVERY run including the ones that were never going to need the answer.
+    Measured 2026-10-13: seven preflight requests to fetch one page of five
+    products. A third-party audit was right to call that a cost worth
+    measuring, and right that it raises the odds of meeting a rate limit.
 
-    A failure here is a WARNING and never fatal: the index is a nicety for
+    `/collections/{handle}.json` answers the same question better:
+
+        /collections/one-pieces.json       HTTP 200, 536 bytes,
+                                           products_count 472
+        /collections/does-not-exist.json   HTTP 404, ZERO bytes
+
+    Better rather than merely cheaper, because the walk could only ever
+    report "the handle was not among the ones I managed to read" — a
+    truncated walk and a missing collection looked identical. Here the store
+    says outright that the route is not there, and `catalog_count` comes back
+    in the same response.
+
+    A failure here is a WARNING and never fatal: this is a nicety for
     reporting, and a run that fetched 180 real products should not be failed
     because a second request did not answer.
     """
@@ -828,41 +844,33 @@ def _resolve_collection_index(session, args) -> None:
     handle = collection_from_url(args.url or "")
     if not handle:
         return
+    url = product_parser.collection_endpoint(handle, _market(args))
     try:
-        index = parse_collections_index(
-            _fetch_text(session, collections_index_endpoint(
-                market=_market(args))))
-        # The index pages at 250; a store with more collections needs the
-        # later pages before a handle can be called absent. 830 here, so a
-        # single page would declare two thirds of them unknown.
-        page = 2
-        while index and page <= product_parser.COLLECTIONS_INDEX_MAX_PAGES:
-            more = parse_collections_index(
-                _fetch_text(session, collections_index_endpoint(
-                    page=page, market=_market(args))))
-            if not more:
-                break
-            index.update(more)
-            page += 1
+        collection = product_parser.parse_collection(_fetch_text(session, url))
     except Exception as e:                       # noqa: BLE001
-        logger.warning("Could not read the collection index (%s). A zero-row "
-                       "run will report `empty` without being able to rule "
-                       "out a mistyped handle.", _mask_credentials(str(e)))
+        logger.warning("Could not check whether %r is a published collection "
+                       "(%s). A zero-row run will report `empty` without "
+                       "being able to rule out a mistyped handle.",
+                       handle, _mask_credentials(str(e)))
         return
-    args.collection_index = index
-    published = product_parser.collection_is_published(index, handle)
-    args.collection_known = published
-    args.catalog_count = product_parser.catalog_count_for(index, handle)
-    if published is False:
-        logger.warning("The store's collection index (%d collections) does "
-                       "not list %r. The endpoint will still answer HTTP 200 "
-                       "with an empty list, so this run would otherwise look "
-                       "like a successfully-scraped empty collection.",
-                       len(index), handle)
-    elif published:
-        logger.info("Collection %r is published (index holds %d collections).",
-                    handle, len(index))
-
+    # An empty body IS the answer here: the JSON route spells a missing
+    # handle as a 404 with no bytes at all. It is reported as "not
+    # published" rather than as "could not tell", because those want
+    # different things from the reader.
+    args.collection_known = collection is not None
+    args.catalog_count = (collection or {}).get("products_count")
+    if not isinstance(args.catalog_count, int):
+        args.catalog_count = None
+    if collection is None:
+        logger.warning("The store does not publish a collection called %r "
+                       "(/collections/%s.json answers 404). Its products.json "
+                       "will still answer HTTP 200 with an empty list, so "
+                       "this run would otherwise look like a "
+                       "successfully-scraped empty collection.",
+                       handle, handle)
+    else:
+        logger.info("Collection %r is published (%s).",
+                    handle, collection.get("title") or "no title")
 def _fetch_one_page(session, args, pool, page_num: int, url: str) -> PageOutcome:
     """Fetch and parse one page. Mirrors playwright_scraper._fetch_one_page.
 
@@ -896,10 +904,18 @@ def _fetch_one_page(session, args, pool, page_num: int, url: str) -> PageOutcome
     for block_attempt in range(block_retries + 1):
         logger.info("Fetching page %d/%d: %s", page_num, args.pages, url)
         load_failed = False
+        # The navigation's own Response, kept rather than discarded — see the
+        # Playwright engine for why a thrown-away status costs the classifier
+        # its only unambiguous signal on a 429. pyppeteer returns one too.
+        status, retry_after = None, None
         for attempt in range(1, args.retries + 1):
             try:
-                bridge.run(page.goto(url, {"waitUntil": "domcontentloaded",
-                                           "timeout": 60000}))
+                response = bridge.run(page.goto(
+                    url, {"waitUntil": "domcontentloaded", "timeout": 60000}))
+                if response is not None:
+                    status = getattr(response, "status", None)
+                    headers = getattr(response, "headers", None) or {}
+                    retry_after = headers.get("retry-after")
                 load_failed = False
                 break
             except Exception as e:  # noqa: BLE001 — pyppeteer raises many types
@@ -934,7 +950,7 @@ def _fetch_one_page(session, args, pool, page_num: int, url: str) -> PageOutcome
             time.sleep(1)
 
         html = _snapshot(session, url) or ""
-        state = page_flow.classify(html, None, page.url)
+        state = page_flow.classify(html, status, page.url)
 
         # A JSON endpoint arrives complete, so a listing is parseable in the
         # FIRST response. The wait below is only for the state that says the
@@ -955,7 +971,7 @@ def _fetch_one_page(session, args, pool, page_num: int, url: str) -> PageOutcome
                 logger.info("Still nothing after %.0fs (%d match(es) for %s).",
                             wait_ms / 1000.0, found, sel)
             html = _snapshot(session, url) or html
-            state = page_flow.classify(html, None, page.url)
+            state = page_flow.classify(html, status, page.url)
 
         # The paid path is reached only for state "captcha" — a rendered
         # Managed Challenge, which IS a test. It is NOT reached for
@@ -972,7 +988,7 @@ def _fetch_one_page(session, args, pool, page_num: int, url: str) -> PageOutcome
             if handle_captcha_if_present(session, args):
                 time.sleep(1)
                 html = _content(session) or html
-                state = page_flow.classify(html, url=page.url)
+                state = page_flow.classify(html, status, page.url)
                 if state == "content":
                     logger.info("The solve was accepted — page %d is content "
                                 "now.", page_num)
