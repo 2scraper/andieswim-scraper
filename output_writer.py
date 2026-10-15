@@ -28,7 +28,7 @@ is that the partial bucket is the biggest one.
 
 Columns this site does NOT have, and the measurement behind each
 --------------------------------------------------------------
-CLAUDE.md §9: a column null on every row of every run should not exist, and
+A column null on every row of every run should not exist, and
 removing one needs the measurement written down so someone can put it back
 with a better one. Counted 2026-09-18 over 665 products across four
 collection captures, plus product documents and rendered pages:
@@ -69,7 +69,7 @@ one-pieces and 150 of 150 items in `/collections/sale` carry a
 `discount_pct` is None, never 0 and never negative, when the pair is not a
 discount. Shopify lets a merchant leave a stale `compare_at_price` UNDER the
 current price; read as a was-price that publishes a negative discount on a
-product that is not on sale (§4).
+product that is not on sale.
 
 `in_stock` is a real column, and `null` is not `False`
 -------------------------------------------------------
@@ -86,15 +86,18 @@ but a product run off it returns seven rows with `in_stock: null`, which is
 honest and useless.
 
 Where a payload states availability for no variant, `in_stock` stays None
-rather than False: an unknown recorded as unknown (§8: never present a guess
+rather than False: an unknown recorded as unknown (never present a guess
 as a fact). On a listing row it is True when ANY variant is available, which
 is what "can I buy this product" means; `variants_available` and
 `variants_total` beside it are what make that actionable, because a bare
 `in_stock: true` hides a product down to its last size.
 """
 
+import contextlib
 import csv
 import json
+import os
+import tempfile
 from dataclasses import dataclass, asdict, field, fields
 from datetime import datetime, timezone
 from typing import Optional, List, Set, Sequence, Any, Type
@@ -111,7 +114,7 @@ SOURCE_DEFAULT = "andieswim.com"
 
 @dataclass
 class Product:
-    # ---- the family prefix, byte-identical and in order (§9) ------------
+    # ---- the family prefix, byte-identical and in order ------------
     source: str = SOURCE_DEFAULT
     scraped_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     # The absolute product URL, rebuilt from the handle on the canonical host
@@ -132,7 +135,7 @@ class Product:
     # ids, 1137 of 1137 variant skus, and no sku shared between two different
     # products across 665 products. `diff_runs.py` refuses to compare two runs
     # whose modes disagree, which is what keeps the two keys from ever being
-    # lined up against each other (§9).
+    # lined up against each other.
     sku: Optional[str] = None
     title: Optional[str] = None
 
@@ -150,7 +153,7 @@ class Product:
     # endpoint publishes NO currency field at all, so this is filled from
     # something the site stated — `variants[].price_currency` on a product
     # document, or `Shopify.currency.active` in the market's HTML — and is
-    # None when the run could not read either (§4, §8).
+    # None when the run could not read either.
     currency: Optional[str] = None
     # Listing row: True when ANY variant is available. Product row: this
     # variant's own availability. None means the payload stated it for no
@@ -163,10 +166,10 @@ class Product:
     category: Optional[str] = None
 
     # ---- provenance and ordering ---------------------------------------
-    # WHICH endpoint the price was read from (§8). There is no rendered-tile
+    # WHICH endpoint the price was read from. There is no rendered-tile
     # view to reconcile against on this site — a collection page paints its
     # grid from the Storefront API after load and serves no prices in its
-    # HTML — so §4 says record the source rather than port a DOM overlay that
+    # HTML — so the rule is to record the source rather than port a DOM overlay that
     # could never confirm anything:
     #
     #   "products_json"  /collections/{h}/products.json  — decimal string
@@ -182,21 +185,21 @@ class Product:
     price_source: Optional[str] = None
     # `page` is 1-based over the run; `position` is the item's rank WITHIN its
     # page and restarts at 1 on each one. Neither is unique alone — the suite
-    # asserts the PAIR is unique across a multi-page run (§18).
+    # asserts the PAIR is unique across a multi-page run.
     page: Optional[int] = None
     position: Optional[int] = None
     # Which mode produced the row. The repo no longer implies it — three modes
     # share this schema — and `diff_runs.py` refuses to compare two runs whose
-    # modes it cannot line up (§9).
+    # modes it cannot line up.
     mode: Optional[str] = None
 
-    # ---- site-specific, at the end (§9) ---------------------------------
+    # ---- site-specific, at the end ---------------------------------
     # The market this row was read from ("en-gb"), or "en-us" for the bare
     # path. Load-bearing because THE PRICE IS SET PER MARKET, not converted:
     # the same variant on 2026-09-18 was 112.00 USD · 195.00 CAD · 110.00 GBP
     # · 175.00 AUD · 130.00 EUR · 21600 JPY. 110 GBP is roughly 148 USD
     # against a 112 USD list, so a cross-market gap is pricing policy and not
-    # arbitrage — say so before anyone builds on it (§20).
+    # arbitrage — say so before anyone builds on it.
     locale: Optional[str] = None
     # Shopify's numeric product id, as a string. Equal to `sku` on a listing
     # row and NOT equal on a product row, which is the point: it is what lines
@@ -222,7 +225,7 @@ class Product:
     # Whole percent, and None rather than 0 or a negative when the pair is not
     # a discount: Shopify lets a stale `compare_at_price` sit BELOW the
     # current price, which read as a was-price publishes a negative discount
-    # on a product that is not on sale (§4). The canary pins that no row
+    # on a product that is not on sale. The canary pins that no row
     # carries an `original_price` at or below its `price`.
     discount_pct: Optional[int] = None
     # The MAXIMUM variant price, written only when the variants genuinely
@@ -323,6 +326,101 @@ def dedupe_by_sku(rows: Sequence[Any], seen: Set[str]) -> List[Any]:
     return dedupe_by_key(rows, seen, key="sku")
 
 
+@contextlib.contextmanager
+def _atomic(path: str, newline: Optional[str] = None):
+    """Write to a temporary file beside `path`, then rename over it.
+
+    `open(path, "w")` truncates before a single byte is written, so a crash,
+    a kill, a full disk or a Ctrl-C halfway through `json.dump` leaves a
+    SHORTER file where a complete one was. That breaks exactly the promise
+    `save()` keeps by refusing to overwrite good output with an empty
+    result: the previous good run is destroyed by the ATTEMPT to replace it
+    rather than by its outcome. Measured here before the fix: a 780-byte
+    good `out.json` came back as 12 bytes of invalid JSON after a write that
+    failed halfway.
+
+    The sidecar is the part that matters most. `<out>.meta.json` is the file
+    a consumer branches on, so a truncated one beside good rows reads as a
+    broken run over data that is fine.
+
+    Three details, each of which is the reason for a line here:
+
+    * the temp file goes in the target's OWN directory, because `os.replace`
+      is atomic only within one filesystem and a temp file under /tmp can be
+      on another, where the rename degrades to an interruptible copy;
+    * `fsync` before the rename is what makes the bytes durable rather than
+      merely visible, so a power loss cannot leave a renamed empty file;
+    * `newline` is passed through because the csv module requires
+      `newline=""` and that requirement has to survive the move into the
+      temp file, or every row gains a stray CR on Windows.
+    """
+    directory = os.path.dirname(os.path.abspath(path)) or "."
+    handle = tempfile.NamedTemporaryFile(
+        mode="w", encoding="utf-8", newline=newline, dir=directory,
+        prefix=os.path.basename(path) + ".", suffix=".tmp", delete=False)
+    try:
+        with handle:
+            yield handle
+            handle.flush()
+            os.fsync(handle.fileno())
+        # `NamedTemporaryFile` creates at 0600 and `os.replace` keeps the
+        # temp file's mode, so without this every output would come out
+        # readable by its owner alone, a regression from `open(path, "w")`,
+        # which honours the umask.
+        #
+        # An existing target keeps its OWN mode, because someone may have
+        # tightened it on purpose and a save should not undo that. A new one
+        # gets exactly what `open()` would have given it. Never a flat
+        # `0o644 & ~umask`: that narrows 0664 to 0644 under umask 002.
+        try:
+            mode = os.stat(path).st_mode & 0o777
+        except OSError:
+            umask = os.umask(0)
+            os.umask(umask)
+            mode = 0o666 & ~umask
+        os.chmod(handle.name, mode)
+        os.replace(handle.name, path)
+    except BaseException:
+        # Including KeyboardInterrupt and SystemExit: an interrupted run
+        # must not leave `out.json.ab12cd.tmp` behind beside the good file.
+        try:
+            os.unlink(handle.name)
+        except OSError:
+            pass
+        raise
+
+
+# A spreadsheet treats a cell beginning with one of these as a FORMULA
+# rather than as text, and every string in these rows was written by the
+# merchant: titles, tags, product types, variant names. `=HYPERLINK(...)`,
+# `+cmd|...` and `@SUM(...)` are the classic shapes; the tab and the two
+# newlines are here because some readers strip a leading one and then
+# execute whatever followed it.
+CSV_FORMULA_LEADS = ("=", "+", "-", "@", "\t", "\r", "\n")
+
+# Excel, Google Sheets and LibreOffice all read a leading apostrophe as
+# "the rest of this cell is text" and do not display it. A consumer parsing
+# the file with the `csv` module DOES see it, which is why the count goes
+# into the sidecar rather than staying silent.
+CSV_FORMULA_ESCAPE = "'"
+
+
+def _csv_escape(v: Any):
+    """Neutralise a formula-shaped cell. Returns (value, was_escaped).
+
+    Only STRINGS are touched. Escaping a number would turn `-5` into text
+    and break every sum a consumer writes over the column.
+
+    CSV only, on purpose. The JSON output keeps the site's bytes exactly as
+    served, so the two files deliberately differ, and `csv_cells_escaped`
+    in the sidecar is what declares that divergence rather than leaving it
+    to be discovered as a stray apostrophe.
+    """
+    if isinstance(v, str) and v.startswith(CSV_FORMULA_LEADS):
+        return CSV_FORMULA_ESCAPE + v, True
+    return v, False
+
+
 # CSV cannot hold a list. Joining with " | " keeps the cell readable in a
 # spreadsheet and round-trippable by splitting on the same separator; the
 # JSON output keeps the real list, so nothing is lost for a consumer that
@@ -338,11 +436,11 @@ def _csv_value(v: Any) -> Any:
 
 
 def write_json(rows: Sequence[Any], path: str) -> None:
-    with open(path, "w", encoding="utf-8") as f:
+    with _atomic(path) as f:
         json.dump([asdict(r) for r in rows], f, ensure_ascii=False, indent=2)
 
 
-def write_csv(rows: Sequence[Any], path: str, row_cls: Type = Product) -> None:
+def write_csv(rows: Sequence[Any], path: str, row_cls: Type = Product) -> int:
     # An empty result still gets the header row. A zero-byte file makes a
     # consumer fail on read (no columns to parse) instead of reading a valid
     # table with zero rows — and "an empty result is still a well-formed
@@ -351,11 +449,22 @@ def write_csv(rows: Sequence[Any], path: str, row_cls: Type = Product) -> None:
     # The header comes from `row_cls`, not from the first row, so an empty
     # run still writes the columns of the mode that produced it.
     fieldnames = [f.name for f in fields(row_cls)]
-    with open(path, "w", encoding="utf-8", newline="") as f:
+    escaped = 0
+    with _atomic(path, newline="") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
         for r in rows:
-            writer.writerow({k: _csv_value(v) for k, v in asdict(r).items()})
+            row = {}
+            for k, v in asdict(r).items():
+                # AFTER the list serialiser, not before it. A list is not a
+                # string, so `_csv_escape` would skip it, and the joined
+                # cell it becomes can perfectly well start with a formula
+                # character.
+                value, was_escaped = _csv_escape(_csv_value(v))
+                row[k] = value
+                escaped += was_escaped
+            writer.writerow(row)
+    return escaped
 
 
 # Exit code used when a run completes but produced nothing. Distinct from 1
@@ -376,7 +485,7 @@ EXIT_NO_PRODUCTS = 4
 # It also does not cover a MISSPELT collection handle, which answers
 # identically — HTTP 200 and an empty list. That one is resolved against the
 # store's own collection index and reported as `unknown_collection`, not as
-# a block (§20).
+# a block.
 #
 # EXIT_BLOCKED has never been produced against this store. Measured
 # 2026-09-18 from a datacenter address: every route HTTP 200 with a browser
@@ -385,28 +494,6 @@ EXIT_NO_PRODUCTS = 4
 # stays wired because a store can be put behind a bot manager between
 # deploys, and the day that happens the run should say `blocked` rather than
 # report a parse failure.
-#   requests `ReadTimeout` after the full timeout, which is
-#            INDISTINGUISHABLE from a slow network unless you know.
-#
-# The trigger is an explicit client-library denylist on the User-Agent, not
-# behaviour and not the address. Measured on one URL, one address, one
-# minute — REFUSED: no UA at all, `curl/8.5.0`, `curl`,
-# `python-requests/2.31.0`, `Python-urllib/3.11`, `Go-http-client/2.0`.
-# SERVED with HTTP 200: `Mozilla/5.0`, `Wget/1.21`, `Scrapy/2.11` and even
-# the literal string `foo`. So it is the library's own default UA that is
-# banned, and any browser-shaped string — including `HeadlessChrome` — walks
-# straight through.
-#
-# Two consequences, and the second is why this is written at such length:
-#
-#   * The three engines drive real browsers and therefore never see it; the
-#     HTTP paths (`scraper_api_client.py`, any `requests` call) will see it
-#     on their first request if they ship a default UA.
-#   * §8 says a proxy failure is not a timeout, and this is the same class
-#     one step further out: on THIS site a timeout from an HTTP client is a
-#     BLOCK, and the answer is to send a browser-shaped User-Agent, not to
-#     retry the identical request or to go looking for a better exit.
-#     Retrying it at the same address with the same UA cannot ever succeed.
 EXIT_BLOCKED = 3
 
 # Exit code for a run that gathered SOME rows and then stopped early — a
@@ -467,7 +554,7 @@ def write_run_meta(out_prefix: str, meta: dict) -> str:
     both complete, and between runs of different `mode`.
     """
     path = f"{out_prefix}.meta.json"
-    with open(path, "w", encoding="utf-8") as f:
+    with _atomic(path) as f:
         json.dump(meta, f, ensure_ascii=False, indent=2)
     print(f"[+] Wrote run metadata -> {path} (status={meta.get('status')})")
     return path
@@ -553,7 +640,8 @@ def run_meta(status: str, stop_reason: str, pages_requested: int,
 
 
 def save(rows: Sequence[Any], out_prefix: str, fmt: str,
-         allow_empty: bool = False, row_cls: Type = Product) -> int:
+         allow_empty: bool = False, row_cls: Type = Product,
+         stats: Optional[dict] = None) -> int:
     """Write JSON/CSV and return a process exit code.
 
     Returns 0 when rows were written, EXIT_NO_PRODUCTS when there were none.
@@ -580,8 +668,18 @@ def save(rows: Sequence[Any], out_prefix: str, fmt: str,
         write_json(rows, f"{out_prefix}.json")
         print(f"[+] Saved {len(rows)} products -> {out_prefix}.json")
     if fmt in ("csv", "both"):
-        write_csv(rows, f"{out_prefix}.csv", row_cls=row_cls)
+        escaped = write_csv(rows, f"{out_prefix}.csv", row_cls=row_cls)
         print(f"[+] Saved {len(rows)} products -> {out_prefix}.csv")
+        # Reported through `stats` rather than as a return value, because
+        # this function's return value is an EXIT CODE and callers exit with
+        # it. The caller threads it into the sidecar.
+        if stats is not None:
+            stats["csv_cells_escaped"] = escaped
+        if escaped:
+            print(f"[!] {escaped} CSV cell(s) began with a formula character "
+                  f"and were prefixed with {CSV_FORMULA_ESCAPE!r} so a "
+                  f"spreadsheet reads them as text. The JSON output is "
+                  f"unchanged; see csv_cells_escaped in the sidecar.")
     return 0 if rows else EXIT_NO_PRODUCTS
 
 
@@ -607,7 +705,7 @@ def save(rows: Sequence[Any], out_prefix: str, fmt: str,
 #
 # Walking off the end is free either way: a page past the last one is HTTP
 # 200 with an empty array, not the HTTP 500 the same overshoot produces on
-# bbb-scraper's site (§21). So an overshoot costs one request and manufactures no error.
+# bbb-scraper's site. So an overshoot costs one request and manufactures no error.
 #
 # "single_page_mode" is complete by construction: --mode product reads one
 # page because one page is all there is. Note that it still emits MANY rows
@@ -615,9 +713,10 @@ def save(rows: Sequence[Any], out_prefix: str, fmt: str,
 # about the size of the output.
 # Note "parser_found_nothing" is deliberately ABSENT. A payload the store
 # served that names products and parsed to zero rows is OUR failure, not a
-# complete answer, and a run that ends that way must not report `complete`
-# (§20). Its exit code stays EXIT_NO_PRODUCTS — the catalogue question really
-# was answered — so only the status and the stop_reason carry the distinction.
+# complete answer, and a run that ends that way must not report `complete`.
+# With no rows it exits EXIT_FETCH_FAILED (5) through `finish_run`'s
+# not-complete branch, not EXIT_NO_PRODUCTS: the store said there were
+# products, so "the catalogue is empty" would be the one wrong answer.
 COMPLETE_STOP_REASONS = ("completed", "pagination_exhausted", "no_new_products",
                          "page_cap_reached", "single_page_mode")
 
@@ -655,7 +754,9 @@ def finish_run(rows: Sequence[Any], out_prefix: str, fmt: str,
     # names has a hole for every name nobody added to it.
     complete = stop_reason in COMPLETE_STOP_REASONS and not pages_failed
     row_cls = ROW_CLASS_BY_MODE.get(mode, Product)
-    rc = save(rows, out_prefix, fmt, allow_empty=allow_empty, row_cls=row_cls)
+    write_stats: dict = {}
+    rc = save(rows, out_prefix, fmt, allow_empty=allow_empty, row_cls=row_cls,
+              stats=write_stats)
     wrote_output = bool(rows) or allow_empty
 
     if wrote_output:
@@ -666,7 +767,9 @@ def finish_run(rows: Sequence[Any], out_prefix: str, fmt: str,
             pages_requested=pages_requested, pages_completed=pages_completed,
             pages_failed=pages_failed, mode=mode, source=source,
             start_url=start_url, final_url=final_url, products=len(rows),
-            extra=extra))
+            # UNDER the caller's `extra`, never over it: a collision here
+            # would be housekeeping silently dropping something the site said.
+            extra=({**write_stats, **(extra or {})} if write_stats else extra)))
 
     if not rows:
         # Nothing gathered at all, and WHY decides the code. The three

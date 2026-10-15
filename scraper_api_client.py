@@ -10,7 +10,7 @@ install, no driver, no Chromium download.
 
 When this path is the right one, and when it is not
 ----------------------------------------------------
-Say it plainly rather than selling it (CLAUDE.md §13). **Nothing on this
+Say it plainly rather than selling it. **Nothing on this
 store is gated.** Measured 2026-09-18 from a datacenter address: every route
 answered HTTP 200 with a browser User-Agent, with `curl`, with
 `python-urllib`, with a crawler UA and with no User-Agent header at all, and
@@ -61,6 +61,7 @@ from product_parser import (BOT_CHALLENGE_MARKERS, endpoint_for,
                             parse_product_detail, parse_products)
 from output_writer import save
 import env_config
+import page_flow
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger("scraper_api_client")
@@ -236,7 +237,7 @@ def main() -> int:
         rc = _run_once(args, attempt, attempts)
         if rc != 3 or attempt == attempts:
             return rc
-        logger.info("Challenge page on attempt %d/%d — retrying in %ds.",
+        logger.info("Challenge page on attempt %d/%d — retrying in %gs.",
                     attempt, attempts, args.retry_delay)
         time.sleep(args.retry_delay)
     return rc
@@ -359,11 +360,11 @@ def parse_args():
     p.add_argument("--allow-empty", action="store_true",
                    help="Write output files even when 0 products were parsed. Off by "
                         "default so a failed fetch can't overwrite a good result.")
-    p.add_argument("--retries", type=int, default=1,
+    p.add_argument("--retries", type=page_flow.EXTRA_ATTEMPTS, default=1,
                    help="Extra attempts if a bot-challenge page comes back. One retry is "
                         "usually worth it. Each attempt is a separate billable task, so "
                         "this defaults to 1.")
-    p.add_argument("--retry-delay", type=int, default=10,
+    p.add_argument("--retry-delay", type=page_flow.SECONDS, default=10,
                    help="Seconds between retries (default 10)")
     p.add_argument("--dump-html", default=None,
                    help="Also write the raw returned HTML to this path (always, even on success)")

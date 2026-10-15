@@ -24,7 +24,7 @@ What is different about Andie Swim
   `curl/8.5.0`, with `python-urllib`, with a crawler UA, and with **no
   User-Agent header at all**. Twenty rapid requests: twenty 200s. No
   challenge has ever been observed. Say so plainly rather than selling a
-  product nobody needs here (CLAUDE.md §13); the README lists what the paid
+  product nobody needs here; the README lists what the paid
   products actually buy on this site, which is a specific MARKET and volume
   from many addresses, not access.
 
@@ -36,10 +36,10 @@ What is different about Andie Swim
   page publishes one JSON-LD block and its `@type` is `BreadcrumbList` —
   there is no `Product` node anywhere. So this engine navigates to the
   store's OWN endpoints, which are ungated and richer than any rendered tile
-  (§21: ask what the front end calls before assuming a browser).
+  (ask what the front end calls before assuming a browser).
 
 * **A JSON document needs no readiness wait, and waiting on one is pure
-  loss.** §8's three causes of missing content — unpainted, lazy-loaded, a
+  loss.** The three causes of missing content — unpainted, lazy-loaded, a
   different page served to this session — are all properties of a rendered
   page. `page_flow.wait_is_meaningful()` says so per URL, and the endpoint
   routes skip the wait rather than burning the whole budget to sample the
@@ -50,7 +50,7 @@ What is different about Andie Swim
   `{"products": []}`; only the HTML route 404s. So a zero-row run checks the
   handle against the store's own collection index and says
   `unknown_collection` rather than `empty` when it is absent. Reporting a
-  typo as a successfully-scraped empty category is the §20 failure this costs
+  typo as a successfully-scraped empty category is the failure this costs
   one request to avoid.
 
 * **`products_count` is not a product count, so nothing is planned from it.**
@@ -64,7 +64,7 @@ What is different about Andie Swim
 * **`--sort` does not exist here, and that is a measurement rather than an
   omission.** The JSON endpoint ignores `sort_by` — verified: the response is
   the same with and without it — so a flag would report an ordering the fetch
-  never applied (§8). Unlike the sibling repo where ordering decides WHICH
+  never applied. Unlike the sibling repo where ordering decides WHICH
   rows land in a capped file, nothing is capped here: a listing run fetches
   every published product in the collection, so ordering decides `position`
   and nothing else, and two runs under different orderings hold the same
@@ -74,7 +74,7 @@ What is different about Andie Swim
   store's own sitemap index lists 200 of them, all `en-xx`. The same variant
   on 2026-09-18: 112.00 USD, 195.00 CAD, 110.00 GBP, 175.00 AUD, 130.00 EUR,
   21600 JPY. 110 GBP is about 148 USD against a 112 USD list, so a
-  cross-market gap is pricing policy and not arbitrage (§20). `--locale
+  cross-market gap is pricing policy and not arbitrage. `--locale
   en-gb` selects one; every row carries which.
 
 * **Currency is read from the site or left null.** The listing endpoint
@@ -82,7 +82,7 @@ What is different about Andie Swim
   a product document's `price_currency`, or from `Shopify.currency.active` in
   the market's own HTML — and writes `null` when it could read neither. It is
   never inferred from the market prefix, which would be a mapping this repo
-  invented (§4, §8).
+  invented.
 
 Usage
 -----
@@ -257,12 +257,12 @@ def _driver(page):
     # driver's dialect.
     #
     # There is no scroll primitive here, and its absence is measured rather
-    # than forgotten (§8: missing content is one of three things, so check
+    # than forgotten (missing content is one of three things, so check
     # which before "fixing" it). None of the three applies: every address
     # this engine fetches is a JSON endpoint that arrives COMPLETE with its
     # response, so there is nothing to paint, nothing to lazy-load and
     # nothing to scroll into view. A scroll loop here would be ceremony that
-    # looks load-bearing (§4).
+    # looks load-bearing.
     #
     # Note the site DOES lazy-load — its rendered collection grid paints 30
     # cards at a time over the Storefront API — which is precisely why this
@@ -342,7 +342,7 @@ def _plan_page_urls(args, page_one_url: str,
                     pages_avail: Optional[int]) -> List[str]:
     """URLs for pages 2..N, decided once from what page 1 reported.
 
-    §7 says a constructed page URL may only be trusted once page 1's own
+    A constructed page URL may only be trusted once page 1's own
     convention has been checked. Checked here, 2026-09-18, by walking the
     whole store: `/products.json?limit=250&page=1..4` returned 250 + 250 +
     250 + 22 = **772 distinct handles with no repeats**, and page 5 was
@@ -353,9 +353,9 @@ def _plan_page_urls(args, page_one_url: str,
     (`products_count` in the collection index) is not a count of products it
     will serve — 472 against 180, 3089 against 322 — so planning against it
     would clamp a correct run against a number that was never right. The end
-    is discovered from the data instead (§7 layer 3), and overshooting is
+    is discovered from the data instead (a data-based stop, not a selector), and overshooting is
     free: a page past the last one is HTTP 200 with an empty array, not the
-    HTTP 500 the same overshoot produces on bbb-scraper's site (§21).
+    HTTP 500 the same overshoot produces on bbb-scraper's site.
     """
     if not page_flow.pagination_is_addressable(args.url or page_one_url):
         # A product document and a predictive-search lookup are ONE response
@@ -660,7 +660,7 @@ def _snapshot(page, url: str) -> Optional[str]:
     return _content_when_settled(page)
 
 
-def handle_captcha_if_present(page, args) -> bool:
+def handle_captcha_if_present(page, args, budget) -> bool:
     """Detect and solve a challenge. True if something was solved.
 
     Runs after EVERY navigation, for ANY page — not scoped to one URL. The
@@ -683,18 +683,17 @@ def handle_captcha_if_present(page, args) -> bool:
     Incapsula, Kasada and AWS WAF markers across every capture, and no
     `data-sitekey` anywhere. (`recaptcha-v3-token` and `g-recaptcha-response`
     DO appear in the page — inside that same Shopify bundle, as two entries
-    in a list of field names it checks for. They are not a reCAPTCHA; §18's
-    rule applies, and both were counted on a page known to be good before
+    in a list of field names it checks for. They are not a reCAPTCHA, and both were counted on a page known to be good before
     either was left out of the marker set.)
 
-    And to be explicit, per §19: this is a statement about what the PAGE
+    And to be explicit: this is a statement about what the PAGE
     carries, not about what can be solved. 2Captcha solves hCaptcha with
     `HCaptchaTaskProxyless`, so if the store ever puts one on a read path
     there is nothing here that says it could not be cleared — only that today
     no read path renders one.
 
     That is a statement about what the SITE renders, not about what can be
-    solved (§19: never write that a captcha cannot be solved — the only
+    solved (never write that a captcha cannot be solved — the only
     sentence anyone is entitled to is "this page carries no widget"). This
     path exists because a bot manager can be switched on between deploys, and
     because the family's rule is that detection stays broad:
@@ -737,6 +736,12 @@ def handle_captcha_if_present(page, args) -> bool:
                        "solved — continuing with whatever the page already "
                        "holds.")
         return False
+    if not budget.spend():
+        logger.info("Not buying another solve for this page: %d of %d "
+                    "already bought. A challenge that survives a solved "
+                    "token is not one this run can pass.",
+                    budget.spent, budget.limit)
+        return False
     try:
         token = solve_recaptcha(challenge, args.twocaptcha_key,
                                api_version=args.captcha_api,
@@ -767,7 +772,7 @@ def _parse_for_mode(html: str, url: str, args, page_num: int = 1):
     document's own evidence rather than returning something plausible. A
     listing parser handed a product document would otherwise emit one row
     whose `position` is 1 and whose page arithmetic was invented, and the run
-    would look complete. `smoke_test.py` pins both directions (§20).
+    would look complete. `smoke_test.py` pins both directions.
 
     They also disagree about a UNIT: `/products/{h}.js` prices in integer
     cents and every other route in a decimal string. Which one a payload is
@@ -822,7 +827,7 @@ def _resolve_run_currency(session, args) -> None:
     1137 variants, not one `price_currency` among them — so without this
     every listing row would carry `currency: null`. The obvious alternative,
     mapping `en-gb` to GBP in this file, would be a table this repo invented
-    rather than a fact the site published (§4 rung 1 against a guess, §8).
+    rather than a fact the site published (a stated fact against a guess).
 
     Two JSON requests, and BOTH being JSON is the whole point:
 
@@ -847,7 +852,7 @@ def _resolve_run_currency(session, args) -> None:
 
     A JSON endpoint runs no JavaScript, so it cannot be redirected that way
     and all three engines get the identical answer. It is also the BETTER
-    source on §4's ladder — `price_currency` is stated beside the price it
+    source on the currency ladder — `price_currency` is stated beside the price it
     belongs to, where `Shopify.currency` is a page-level fact one step
     removed.
 
@@ -890,7 +895,7 @@ def _resolve_collection_index(session, args) -> None:
     `{"products": []}`** — only the HTML route 404s — so a zero-row run is
     ambiguous on the listing document alone, and without this check every
     mistyped handle reports a successfully-scraped empty collection. That is
-    the §20 failure this costs one request to avoid.
+    the failure this costs one request to avoid.
 
     ONE request, and it used to be five. The first version walked
     `/collections.json?limit=250` until a page came back empty, because that
@@ -987,7 +992,7 @@ def _fetch_one_page(session, args, pool, page_num: int, url: str) -> PageOutcome
     # Counted across the whole block-retry loop, not per attempt: a page that
     # keeps coming back as a challenge would otherwise buy one solve per
     # rotation, which is how a run quietly turns into a bill.
-    solves_bought = 0
+    budget = page_flow.SolveBudget()
     throttle_waits = 0
     html, state, load_failed = None, "ok", False
 
@@ -1045,7 +1050,7 @@ def _fetch_one_page(session, args, pool, page_num: int, url: str) -> PageOutcome
         if load_failed:
             break
 
-        if handle_captcha_if_present(session.page, args):
+        if handle_captcha_if_present(session.page, args, budget):
             # A solve navigated the page. Give the destination a moment
             # before judging what came back.
             session.page.wait_for_timeout(1000)
@@ -1056,7 +1061,7 @@ def _fetch_one_page(session, args, pool, page_num: int, url: str) -> PageOutcome
         # A throttle is not a block and not a transient fault: re-asking at
         # once is what caused it. Wait what the edge asked for (or a backoff
         # when it asked for nothing), out of a budget of its own so it does
-        # not eat `--retries` (§24).
+        # not eat `--retries`.
         if state == "throttled":
             if throttle_waits < page_flow.THROTTLE_WAITS:
                 pause = page_flow.throttle_pause(retry_after, throttle_waits + 1)
@@ -1113,9 +1118,8 @@ def _fetch_one_page(session, args, pool, page_num: int, url: str) -> PageOutcome
         # the two states, and it is bounded by SOLVES_PER_PAGE so a rotation
         # loop cannot become a bill.
         if (page_flow.should_solve(state)
-                and solves_bought < page_flow.SOLVES_PER_PAGE):
-            solves_bought += 1
-            if handle_captcha_if_present(session.page, args):
+                and budget.allows()):
+            if handle_captcha_if_present(session.page, args, budget):
                 session.page.wait_for_timeout(1000)
                 html = _snapshot(session.page, url) or html
                 state = _classify(session.page, html, status)
@@ -1221,7 +1225,7 @@ def _fetch_one_page(session, args, pool, page_num: int, url: str) -> PageOutcome
     # JSON endpoint hands over the whole payload in one response, so there is
     # nothing to wait for and nothing to scroll into view. Porting the
     # sibling repos' scroll loop here would be dead code that looks
-    # load-bearing (CLAUDE.md §4).
+    # load-bearing.
 
     # Dumping on success, not only on failure: a run can return the right
     # NUMBER of rows with a field silently unpopulated, and then the only way
@@ -1317,7 +1321,7 @@ def _fetch_one_page(session, args, pool, page_num: int, url: str) -> PageOutcome
                             "--mode listing on a collection.",
                             product_parser.SEARCH_MAX_RESULTS)
 
-    # §20: tell a BROKEN PARSER apart from an EMPTY CATEGORY before anything
+    # Tell a BROKEN PARSER apart from an EMPTY CATEGORY before anything
     # downstream reports "0 products" and sends the reader to check the URL.
     if not products and page_flow.looks_like_a_parse_failure(
             state, len(products), product_link_count(html or "")):
@@ -1384,7 +1388,7 @@ def _fetch_one_page(session, args, pool, page_num: int, url: str) -> PageOutcome
                 # off that endpoint knows the sizes and not which are in
                 # stock. Said out loud rather than left as a column of nulls
                 # the reader has to notice: `in_stock: null` is "not stated",
-                # never "out of stock" (§8).
+                # never "out of stock".
                 logger.info("%d of %d variants state no availability — this "
                             "endpoint does not publish it. Those rows carry "
                             "in_stock: null, which means UNKNOWN and not "
@@ -1498,8 +1502,8 @@ def scrape(args) -> int:
     outcomes: List[PageOutcome] = []
     seen_keys = set()
     blocked = False
-    # All three modes are one row per business-at-a-location, so `sku` is the
-    # key for all of them.
+    # Every mode emits one row per `sku` (a product in listing and search,
+    # a variant in product mode), so `sku` is the key for all of them.
     dedupe_key = "sku"
     # Why the loop ended. "completed" means every requested page was fetched;
     # "no_new_products" means the listing itself ran out (also a complete
@@ -1592,7 +1596,7 @@ def scrape(args) -> int:
                 blocked = first.blocked_by is not None
             elif first.state == "parse_failed":
                 # Served, linked to products, parsed to nothing: OUR bug, and
-                # it must not reach the sidecar as a complete run (§20).
+                # it must not reach the sidecar as a complete run.
                 stop_reason = "parser_found_nothing"
             elif args.mode == "product":
                 pass  # one page is the whole run — but many rows
@@ -1742,7 +1746,7 @@ def scrape(args) -> int:
         # `totalResults`; this store states nothing usable — its
         # `products_count` is not a count of products it serves (472 against
         # 180, 3089 against 322) — so a share computed from it would be a
-        # percentage of a number that was never right. §13: a count that rots
+        # percentage of a number that was never right. A count that rots
         # is worse than no count.
         #
         # What CAN be said honestly is said instead: a listing run that
@@ -1855,12 +1859,12 @@ def parse_args():
                         "another's label is a silent wrong answer."
                         % DEFAULT_LOCALE)
     # NO `--sort` HERE, DELIBERATELY, and `smoke_test.py` asserts it stays
-    # absent (§10: guard a removed flag, or an editor reintroduces it).
+    # absent (guard a removed flag, or an editor reintroduces it).
     #
     # The JSON endpoint does not take `sort_by` and ignores one that is
     # passed — verified 2026-09-18, the response is the same with and
     # without. A flag would therefore report an ordering the fetch never
-    # applied, which is §8's "never present a guess as a fact" with a column
+    # applied, which is "never present a guess as a fact" with a column
     # attached. The sibling repo NEEDS its `--sort` because that site caps a
     # result set and the ordering decides which rows land inside the cap;
     # here nothing is capped, so ordering decides `position` and nothing
@@ -1901,7 +1905,7 @@ def parse_args():
                         "/en-gb/collections/one-pieces are both real. The "
                         "store publishes 830 collections; "
                         "/collections.json?limit=250 lists them.")
-    p.add_argument("--pages", type=int, default=1,
+    p.add_argument("--pages", type=page_flow.PAGES, default=1,
                    help="Number of listing pages to fetch. Applies to --mode "
                         "category and --mode search; ignored in --mode "
                         "product. Page 1 prints the catalogue's own result "
@@ -1911,8 +1915,8 @@ def parse_args():
                         "served, empty grid rather than an error — so a "
                         "request is limited only by what the category holds, "
                         "and the sidecar records both numbers.")
-    p.add_argument("--delay", type=float, default=2.0, help="Delay between pages, seconds")
-    p.add_argument("--concurrency", type=int, default=1, metavar="N",
+    p.add_argument("--delay", type=page_flow.SECONDS, default=2.0, help="Delay between pages, seconds")
+    p.add_argument("--concurrency", type=page_flow.WORKERS, default=1, metavar="N",
                    help="Fetch pages through N parallel workers (default 1 — "
                         "unchanged sequential behaviour). Each worker runs its "
                         "own browser and holds its own proxy exit, so N>1 "
@@ -1924,7 +1928,7 @@ def parse_args():
                         "that comes back EMPTY is not retried — see "
                         "page_flow.STATE_POLICY — because a hub page with no "
                         "products on it is a correct answer, not a fault.")
-    p.add_argument("--retry-delay", type=float, default=2.0,
+    p.add_argument("--retry-delay", type=page_flow.SECONDS, default=2.0,
                    help="Seconds before the first page-load retry, doubling "
                         "thereafter (default 2.0)")
     p.add_argument("--format", choices=["json", "csv", "both"], default="both")
@@ -1943,7 +1947,7 @@ def parse_args():
     p.add_argument("--proxy-shuffle", action="store_true",
                    help="Shuffle the pool at startup, so concurrent runs do not "
                         "all begin on the first exit in the file.")
-    p.add_argument("--proxy-block-retries", type=int, default=2,
+    p.add_argument("--proxy-block-retries", type=page_flow.EXTRA_ATTEMPTS, default=2,
                    help="When a page comes back refused or behind a captcha, "
                         "retry it from this many OTHER exits before giving up "
                         "(default 2). Needs a pool of more than one; ignored "
@@ -2012,27 +2016,24 @@ def parse_args():
     p.add_argument("--headless", action="store_true", default=True)
     p.add_argument("--headful", dest="headless", action="store_false")
     args = p.parse_args()
+    # Recorded BEFORE the environment is applied: afterwards a typed --url
+    # and one from ANDIESWIM_URL are indistinguishable, and only the typed
+    # one may conflict with --query/--category/--locale.
+    typed_url = args.url
     # Fill --twocaptcha-key / --cdp-endpoint / --proxy / --url from the
     # environment or .env when the flag was not given. An explicit flag wins.
     env_config.apply(args)
 
-    # --url and the query flags are two ways to say the same thing, and only
-    # one of them may win. Refused rather than merged: a --locale that
-    # disagreed with the locale already in a URL would silently read a
-    # different MARKET than the address names — and on this site that is a
-    # different price, not just a different language. This is the family's
-    # --country ban (CLAUDE.md §10) applied where it actually bites: there is
-    # one host for all 72 markets, so the flag cannot contradict a HOSTNAME,
-    # only a path segment, and this is where that is caught.
-    if args.url and args.locale:
-        p.error("--url already carries its locale (%r) and --locale would "
-                "have to agree with it; nothing here checks that they do, and "
-                "on this site disagreeing means a different price. Pass "
-                "either a URL or --locale, not both."
-                % (locale_from_url(args.url) or "none"))
-    if args.url and args.query:
-        p.error("--url already names what to fetch; --query would have to "
-                "agree with it. Pass either a URL or --query, not both.")
+    # --url and the query flags are two ways to say the same thing. A typed
+    # --url that disagrees with --locale or --query is refused: a --locale
+    # disagreeing with the market in the URL would silently read a different
+    # MARKET, which on this site is a different price, not just a different
+    # language. There is one host for every market, so the flag cannot
+    # contradict a HOSTNAME, only a path segment, and this is where that is
+    # caught. A URL from the environment is a default and gives way.
+    conflict = page_flow.reconcile_url_flags(args, typed_url)
+    if conflict:
+        p.error(conflict)
 
     locale = (args.locale or DEFAULT_LOCALE).strip().lower()
     if locale != DEFAULT_LOCALE and not market_is_well_formed(locale):
@@ -2044,7 +2045,7 @@ def parse_args():
         # A WARNING, not an error, and the shape of the list is the reason.
         # The store's sitemap index names 200 markets; five of them were
         # fetched and confirmed to return their own currency. Hardcoding 200
-        # two-letter pairs would be a table that rots (§13), and refusing an
+        # two-letter pairs would be a table that rots, and refusing an
         # unverified-but-well-formed one would refuse 195 real markets. If
         # the market does not exist the store answers 404 and the run reports
         # that rather than guessing.
@@ -2084,7 +2085,7 @@ def parse_args():
         # Refused rather than attempted. This parser reads this store's own
         # Shopify JSON and its `/collections/…` and `/products/…` URL shapes;
         # pointing it at another site would not fail loudly, it would return
-        # zero rows and look like an empty result (§8). The REASON is given,
+        # zero rows and look like an empty result. The REASON is given,
         # because "is not an andieswim.com site" about a host that plainly is
         # one sends the reader hunting a typo they did not make.
         p.error(f"{args.url!r} {why}.")

@@ -2,7 +2,7 @@
 page_flow.py
 ------------
 The retry / solve / blocked decision, as DATA rather than as three copies of
-an if-chain (CLAUDE.md §1).
+an if-chain.
 
 This store answers a request six ways, and five of them want a different
 response:
@@ -25,7 +25,7 @@ of a collection answers HTTP 200 with `{"products": []}`, and so does a
 collection handle that does not exist — those two are byte-identical, which
 is why `empty` never means "we are sure this collection is empty". The
 engines resolve it against the store's own collection index and report
-`unknown_collection` rather than `empty` when the handle is absent (§20).
+`unknown_collection` rather than `empty` when the handle is absent.
 
 **`not_found` must not retry.** A mistyped handle is not going to start
 existing, and three retries on a typo turn an instant, clear answer into a
@@ -38,8 +38,8 @@ WHAT THIS SITE DOES *NOT* DO, RE-MEASURED RATHER THAN INHERITED
 The repo this one was built from documents an edge that refuses a request
 whose User-Agent names an HTTP client library, by killing the connection
 rather than answering — so on THAT site a timeout from an HTTP client is a
-block rather than a slow network. CLAUDE.md §13: a warning you inherited is
-not one you measured.
+block rather than a slow network. A warning you inherited is not one you
+measured.
 
 Re-measured here, 2026-09-18, one URL and one address:
 
@@ -51,14 +51,14 @@ Re-measured here, 2026-09-18, one URL and one address:
     20 requests in 4.9 s          20 x HTTP 200
 
 So `classify_transport_error` is kept — a dead proxy and a real timeout still
-want opposite responses (§8) — but there is no User-Agent denylist here and
+want opposite responses — but there is no User-Agent denylist here and
 this module carries no helper pretending otherwise.
 
 Nothing here imports a browser, and **no JavaScript crosses this boundary**:
 Selenium's `execute_script` takes a function BODY with an explicit `return`
 while Playwright and pyppeteer take `() => expr`, so a shared snippet would
 quietly acquire one driver's dialect. The callbacks below are named for the
-OPERATION instead, and each engine spells it in its own dialect (§1).
+OPERATION instead, and each engine spells it in its own dialect.
 """
 
 import logging
@@ -80,13 +80,13 @@ log = logging.getLogger("page_flow")
 
 # How many product entries mean "this response is a listing".
 #
-# `> 1` on purpose, per CLAUDE.md §5: waiting for ONE match resolves on
+# `> 1` on purpose, because waiting for ONE match resolves on
 # something unrelated long before the data is really there.
 #
 # But note WHAT is being counted here, because it is not what the family
 # usually counts. Every route this repo fetches is a JSON endpoint that
 # arrives COMPLETE with its response — there is no grid to paint, no lazy
-# load, and no scroll. §8 says missing content is one of three things
+# load, and no scroll. Missing content is one of three things
 # (unpainted, lazy-loaded, or a different page served to this session); on a
 # JSON document it is NONE of the three, and a readiness wait on one can only
 # ever burn its whole budget and then succeed or fail on the first sample.
@@ -101,7 +101,7 @@ MIN_CARD_MATCHES = 2
 #
 # Only ever used on the HTML product route. `[data-oke-reviews-product-id]`
 # is the store's own attribute, present once on a product page and **zero
-# times** on a collection page — counted on the captures, per §18, before it
+# times** on a collection page — counted on the captures before it
 # was chosen. The obvious alternative, `.product-card`, counts 0 on the
 # server-rendered collection HTML (the grid is painted later by React) and is
 # therefore an anchor that never fires on the page kind it names.
@@ -143,7 +143,7 @@ def wait_is_meaningful(url: str) -> bool:
 #
 # Polled through `count(selector)` — a callback each engine implements with
 # its own `querySelectorAll` call — and NEVER by handing the browser a string
-# to evaluate. CLAUDE.md §18: a site whose Content-Security-Policy omits
+# to evaluate. A site whose Content-Security-Policy omits
 # `unsafe-eval` kills `wait_for_function` with an `EvalError` and takes the
 # run down with exit 1, on the site's most obvious URL. This store's own CSP
 # was not measured for that, and the cheap habit costs nothing on a site that
@@ -183,7 +183,7 @@ def classify(html: Optional[str], status: Optional[int] = None,
     url=...)` in two of three engines against a callee that took `status`
     second, and both crashed on their first fetch — invisible to import,
     `--help`, `compileall` and 400+ green offline assertions, because none of
-    those calls a function the way a live run does (§17). `smoke_test.py`
+    those calls a function the way a live run does. `smoke_test.py`
     binds every engine's call against this signature for that reason.
     """
     return detect_page_state(html or "", status, url)[0]
@@ -208,7 +208,7 @@ def classify_with_reason(html: Optional[str], status: Optional[int] = None,
 # name and Chromium puts it in the message.
 #
 # Chromium's proxy errors are listed separately below and deliberately NOT
-# folded in here: §8 says a proxy failure is not a timeout and the two want
+# folded in here: a proxy failure is not a timeout and the two want
 # opposite responses — a timeout deserves another try at the same exit, a
 # dead proxy a different one.
 _TRANSPORT_REFUSAL_RE = re.compile(
@@ -224,7 +224,7 @@ _TRANSPORT_REFUSAL_RE = re.compile(
     re.I)
 
 # Chromium's own names for "the proxy is dead", which is a different fault
-# with a different remedy (§8). Kept apart so the caller can rotate rather
+# with a different remedy. Kept apart so the caller can rotate rather
 # than retry.
 _PROXY_FAILURE_RE = re.compile(
     r"ERR_PROXY_CONNECTION_FAILED"
@@ -249,7 +249,7 @@ def classify_transport_error(exc: BaseException) -> str:
     client-library UA tried — so unlike the repo this code came from, a reset
     here really is a network fault and an ordinary retry is the right
     response. The distinction that still matters is "proxy": a dead exit
-    wants a rotation, not a retry (§8).
+    wants a rotation, not a retry.
 
     This deliberately over-classifies a genuine slow network as "refused".
     That is the safer direction: the remedy printed for "refused" (send a
@@ -275,14 +275,14 @@ def classify_transport_error(exc: BaseException) -> str:
 # with an ordinary browser UA. Twenty rapid requests: twenty 200s.
 #
 # So the helper was deleted rather than copied. It also had no consumer
-# outside its own module (§17: grep every public name for one), which makes
-# it the exact pair of defects CLAUDE.md warns about — dead code whose
+# outside its own module (grep every public name for one), which makes
+# it the exact pair of defects worth avoiding — dead code whose
 # comment reads like enforcement, carrying a claim inherited rather than
-# measured (§13, §16).
+# measured.
 
 
 # How many product links a SERVED page must carry before "we parsed nothing"
-# is reported as OUR failure rather than as an empty category (§20).
+# is reported as OUR failure rather than as an empty category.
 #
 # Two rather than one: a single stray product link can appear in a nav
 # flyout or a "recently viewed" strip on a page that genuinely lists no
@@ -298,7 +298,7 @@ def looks_like_a_parse_failure(state: str, rows: int, link_count: int) -> bool:
     say so by name — "0 products" sends the reader to check the URL when the
     thing to check is the parser. Deliberately NOT a new exit code: the
     catalogue question really was answered, so it stays EXIT_NO_PRODUCTS and
-    only the `stop_reason` differs (§20).
+    only the `stop_reason` differs.
     """
     if rows:
         return False
@@ -321,7 +321,7 @@ STATE_POLICY = {
     # `{"products": []}` rather than 404. That distinction cannot be made
     # from the document, so it is not made here: the engines check the handle
     # against the collection index and report `unknown_collection` instead of
-    # `empty` when it is absent (§20).
+    # `empty` when it is absent.
     "empty":     {"retry": False, "solve": False, "blocked": False, "parse": True},
     # A refusal with no challenge on it. There is nothing to solve — the edge
     # is not offering a test, it is declining — so the only move is a
@@ -336,7 +336,7 @@ STATE_POLICY = {
     # spend.
     "unknown":   {"retry": True,  "solve": False, "blocked": False, "parse": False},
     # The edge asked us to slow down (HTTP 429, or a 5xx). RETRY, but NOT as
-    # a block: §24's lesson is that a throttle and a refusal want opposite
+    # a block: a throttle and a refusal want opposite
     # responses — a throttle wants a wait at the SAME exit, a refusal wants a
     # different one. `blocked` is False so the run does not report exit 3 and
     # send a reader to buy a proxy they do not need; the wait comes from
@@ -375,7 +375,7 @@ def should_parse(state: str) -> bool:
 # True here, and CONSULTED rather than merely documented — the engines read
 # it, so setting it False really does stop the retry loop. (A sibling repo
 # carried this constant with a paragraph of justification and no reader,
-# which is the same defect as dead code that looks load-bearing: §17.)
+# which is the same defect as dead code that looks load-bearing.)
 #
 # True, though it has never had occasion to fire on this store: nothing here
 # has ever answered `blocked`. It stays True because IF that changes, a
@@ -396,14 +396,14 @@ BLOCK_RETRIES_WITHOUT_POOL = 1
 
 # How long to wait when the edge throttles, and how many times.
 #
-# Separate from `--retries` on purpose (§24). A throttle is not a transient
+# Separate from `--retries` on purpose. A throttle is not a transient
 # fault: re-asking immediately is what caused it, so spending the user's
 # retry budget on it both fails and makes the cause worse.
 #
 # The edge states the wait when it knows one — Cloudflare sent
 # `Retry-After: 60` on the one observation this store has produced — and
 # `Retry-After` is the site talking, so it wins over anything chosen here
-# (§8: never present a guess as a fact when the site states it). The cap
+# (never present a guess as a fact when the site states it). The cap
 # exists because a header is not a promise: a 3600 would otherwise hang a
 # run for an hour with no output.
 THROTTLE_WAITS = 2
@@ -435,6 +435,39 @@ def throttle_pause(retry_after=None, attempt: int = 1) -> float:
 SOLVES_PER_PAGE = 1
 
 
+class SolveBudget:
+    """The one allowance every paid solve on a page goes through.
+
+    Each engine asks for a captcha solve at two points per fetch attempt:
+    once before the page is classified, so a challenge is cleared before
+    anything is judged, and once after, for the state that says the page
+    really is gated. Only the second used to be counted, so the first
+    repeated on every block-retry and rotation: with the solver stubbed, a
+    page bought 3 solves against a limit of 1 with no proxy pool, and 4 with
+    a three-exit pool.
+
+    One object per PAGE, created before the retry loop and never reset: a
+    fresh exit is a reason to re-fetch, not a fresh allowance to spend. The
+    check happens at the moment of purchase (inside the captcha handler,
+    after detection and after the key check), so an attempt that finds no
+    challenge spends nothing.
+    """
+
+    def __init__(self, limit: int = None):
+        self.limit = SOLVES_PER_PAGE if limit is None else limit
+        self.spent = 0
+
+    def allows(self) -> bool:
+        return self.spent < self.limit
+
+    def spend(self) -> bool:
+        """Count one purchase. False, and nothing counted, if none is left."""
+        if not self.allows():
+            return False
+        self.spent += 1
+        return True
+
+
 # ---------------------------------------------------------------------------
 # Pagination
 # ---------------------------------------------------------------------------
@@ -442,7 +475,7 @@ SOLVES_PER_PAGE = 1
 def pagination_is_addressable(url: str) -> bool:
     """Whether page N of this listing can be fetched without walking to it.
 
-    This is the question CLAUDE.md §18 says to ask PER URL rather than per
+    This is the question to ask PER URL rather than per
     site, because a sibling repo has one page kind that paginates by address
     and one that does not — and a `page_url()` used unconditionally there
     reported a COMPLETE run holding page 1.
@@ -498,10 +531,10 @@ def plan_from_total(pages_requested: int, total: Optional[int],
     for `one-pieces`, 3089 against 322 for `all-swimwear`, against a
     whole-store total of 772 published products. Planning from it would clamp
     nothing and would make every run look short of a target it was never
-    going to reach — CLAUDE.md §13's rotted number, except the number was
+    going to reach — a rotted number, except the number was
     never right rather than merely stale.
 
-    So the run discovers its own end from the data instead (§7 layer 3): a
+    So the run discovers its own end from the data instead (a data-based stop, not a selector): a
     page that returns no products, or adds no new id, is the last one. That
     costs exactly one extra request per run and cannot be wrong.
     """
@@ -515,9 +548,58 @@ def concurrency_limit(cdp_endpoint: Optional[str]) -> Optional[int]:
 
     The Scraping Browser API allows ONE live connection per profile, so N
     workers sharing a `pid` collide with `profile_locked`. Several `pid`s,
-    one run each, is the way to parallelise that path (§7).
+    one run each, is the way to parallelise that path.
     """
     return 1 if cdp_endpoint else None
+
+
+def reconcile_url_flags(args, typed_url: Optional[str]) -> Optional[str]:
+    """Settle --url against --query/--category/--locale. Returns an error
+    message for argparse, or None (and may rewrite `args.url`).
+
+    `typed_url` is `args.url` as it stood BEFORE the environment was applied.
+    `env_config.apply` fills only unset values, so after it runs a URL typed
+    on the command line and one read from ANDIESWIM_URL look identical, and
+    the conflict checks below used to refuse `--query`, `--category` and
+    `--locale` for everyone whose `.env` carried the URL that
+    `.env.example` ships. A URL from the environment is a DEFAULT: a flag
+    typed on the command line wins over it.
+
+      * typed --query or --category: the environment URL is dropped and the
+        builder makes the address, as if no URL had been set;
+      * typed --locale alone: the environment URL is re-addressed to that
+        market;
+      * a typed --url with --query: refused, two ways to say what to fetch;
+      * a typed --url with --locale: accepted when the two name the same
+        market, refused when they disagree, because on this store a
+        different market is a different price list.
+    """
+    env_url = bool(args.url) and not typed_url
+    locale = (args.locale or "").strip().lower() or None
+    if env_url and (args.query or args.category):
+        log.info("Ignoring ANDIESWIM_URL from the environment: --query or "
+                 "--category on the command line names what to fetch.")
+        args.url = None
+        return None
+    if env_url and locale:
+        rewritten = product_parser.with_market(args.url, locale)
+        if rewritten != args.url:
+            log.info("Re-addressed ANDIESWIM_URL to the --locale market: "
+                     "%s", rewritten)
+        args.url = rewritten
+        return None
+    if args.url and locale:
+        in_url = product_parser.locale_from_url(args.url)
+        if in_url != locale:
+            return ("--url carries the market %r and --locale says %r. On "
+                    "this store a different market is a different price "
+                    "list, so one of them would be silently wrong. Pass "
+                    "either a URL or --locale, or make them agree."
+                    % (in_url, locale))
+    if args.url and args.query:
+        return ("--url already names what to fetch; --query would have to "
+                "agree with it. Pass either a URL or --query, not both.")
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -563,3 +645,32 @@ def attempts(value) -> int:
             f"With 0 the load loop never runs, nothing is fetched, and the "
             f"engine reports the browser's blank page as a result.")
     return number
+
+
+def bounded(kind, minimum: float, what: str):
+    """argparse `type=` that rejects a value below `minimum`, naming why.
+
+    For the numeric flags that count pages, workers, exits or seconds. A
+    negative `--pages` or `--delay` used to be accepted and then behave as
+    something nobody asked for (no pages planned, `time.sleep` raising
+    mid-run); argparse now refuses it with the flag's name in the message.
+    """
+    def parse(value):
+        try:
+            number = kind(value)
+        except (TypeError, ValueError):
+            raise _argparse.ArgumentTypeError(
+                f"must be {'an integer' if kind is int else 'a number'}, "
+                f"not {value!r}")
+        if number < minimum:
+            raise _argparse.ArgumentTypeError(
+                f"must be at least {minimum:g} ({what}), not {value}")
+        return number
+    parse.__name__ = kind.__name__
+    return parse
+
+
+PAGES = bounded(int, 1, "the number of pages to fetch")
+WORKERS = bounded(int, 1, "the number of browsers fetching at once")
+SECONDS = bounded(float, 0, "a pause in seconds")
+EXTRA_ATTEMPTS = bounded(int, 0, "extra attempts after the first")

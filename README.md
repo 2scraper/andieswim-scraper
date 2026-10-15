@@ -56,7 +56,7 @@ address would not help — and a run still holding nothing reports a rate
 limit, never an empty catalogue.
 
 So read the table as "this store does not gate reads", not as "you cannot be
-rate limited". Re-derive it rather than trusting it (CLAUDE.md §13): the
+rate limited". Re-derive it rather than trusting it: the
 commands are one `curl` each.
 
 **What the 2Captcha products actually buy here**, which is real but narrow:
@@ -162,7 +162,7 @@ which size is. Re-derive rather than trusting the split: count
 
 `--url .../collections/one-pieces --pages 3`, 2026-09-18, from a datacenter
 address with no proxy and no key. Re-derive rather than trusting this table
-(CLAUDE.md §13) — every figure comes from `<out>.json` and `<out>.meta.json`:
+ — every figure comes from `<out>.json` and `<out>.meta.json`:
 
 | | |
 |---|---|
@@ -287,7 +287,9 @@ source. **A failed run writes nothing** — last night's good output is never
 replaced with `[]` (`--allow-empty` opts out).
 
 **Exit codes:** `0` ok · `1` crash · `2` bad usage · `3` blocked ·
-`4` zero products · `5` remote API error · `6` partial.
+`4` zero products · `5` no rows, the content was never obtained (a
+timeout, a dead proxy, a remote API error, or a served payload that
+parsed to nothing) · `6` partial.
 
 ---
 

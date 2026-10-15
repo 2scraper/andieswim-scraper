@@ -8,7 +8,7 @@ requests>=2.31.0
 
 # NO beautifulsoup4 here, and the absence is deliberate rather than an
 # oversight — it is this repo's one deviation from the family's core
-# dependency set (CLAUDE.md §4 makes `BeautifulSoup(html, "html.parser")` the
+# dependency set (the family makes `BeautifulSoup(html, "html.parser")` the
 # default), so it is written down rather than left to be discovered.
 #
 # The reason is the shape of this site: every field this repo publishes comes

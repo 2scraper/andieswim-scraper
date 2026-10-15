@@ -17,13 +17,66 @@ release notes say so at the top.
 > script of yours passes 0, pass **1**: the flag counts ATTEMPTS, so 1 means
 > "try once and do not retry".
 
+> **Behaviour change:** negative and zero values that never made sense are
+> now usage errors (exit 2) naming the flag: `--pages` and `--concurrency`
+> below 1, and a negative `--delay`, `--retry-delay` or
+> `--proxy-block-retries`, in all three engines; a negative `--retries` or
+> `--retry-delay` in `scraper_api_client.py`.
+
+> **Behaviour change:** the CSV output now prefixes a cell that begins with
+> `=`, `+`, `-`, `@`, a tab, CR or LF with an apostrophe, so a spreadsheet
+> reads it as text. Numbers and the JSON output are unchanged, and the
+> sidecar records `csv_cells_escaped`.
+
+> **Behaviour change:** a `--locale` that agrees with the market in a typed
+> `--url` is now accepted (it was refused, including in the README's own
+> example), and `ANDIESWIM_URL` from the environment no longer blocks
+> `--query`, `--category` or `--locale`: a typed flag wins over it.
+
 ### Fixed
+
+- **The Selenium and pyppeteer engines crashed without a proxy pool.** Any
+  page classified blocked, captcha or unknown (and, in pyppeteer, a load
+  that failed `--retries` times) reached `pool.current` / `pool.advance` on
+  `None` and ended the run with `AttributeError`, exit 1 and no output. Both
+  now back off and re-fetch, as the Playwright engine did; a check drives
+  each engine's real fetch loop with the driver stubbed and no pool.
+- **The one-solve-per-page allowance was bypassed.** The captcha handler
+  runs before and after the page is classified, and only the second call
+  was counted, so with a stubbed solver a page bought 3 solves with no pool
+  and 4 with a three-exit pool against a limit of 1. Both call sites in all
+  three engines now go through one `page_flow.SolveBudget` per page,
+  checked at the moment of purchase and not reset by retries or rotation.
+- **Output writes were not atomic.** A write that failed halfway left a
+  truncated `out.json` (12 bytes of invalid JSON where a 780-byte good file
+  had been). JSON, CSV and the sidecar are now written to a temp file beside
+  the target and renamed over it. A new file gets `0666 & ~umask`, as
+  before; an existing file keeps its mode.
+- **The credential scan skipped everything in a clone under a directory
+  named like a virtualenv** (`~/venv/clone`) and still reported "nothing
+  credential-shaped". Exclusions are now judged inside the repository, and
+  a scan that read no files fails.
+- **`.gitignore` missed real dump shapes**: `X.pageN` from `--dump-html`
+  with `--pages`, a bare `dump.html` at the top level, and working
+  directories such as `live/` and `out/`.
+- **The canary could end green without testing everything.** The Scraping
+  Browser job skipped with a notice when its secret was missing; it now
+  fails with an error naming `ANDIESWIM_CDP_ENDPOINT`. The listing floor
+  tests the parser (rows on all three pages) rather than sitting 10 rows
+  under the 150-row cap, and "some products are partially available" is a
+  notice, because it measures stock rather than the parser.
+- Wording: exit 5 is described as "no rows, the content was never obtained"
+  everywhere; the "credentials expire in about a day" claim is removed (the
+  lifetime varies); the market count reads 200 everywhere; internal
+  section references were replaced by the rule they pointed at, and a check
+  keeps them out.
 
 - **`--retries 0` fetched nothing and called it a result.** The load loop is
   `range(1, retries + 1)`, so 0 never runs it and the engine judged
   `about:blank`. Three third-party audits of this family ran exactly that and
   reported a working scraper as broken. `--retries` now goes through
-  `page_flow.attempts` in every entry point; a check reads the source of each
+  `page_flow.attempts` in every browser engine (`scraper_api_client.py`
+  counts EXTRA attempts, so 0 is legal there); a check reads the source of each
   one and calls the validator, so a new engine declaring the flag with a
   plain int fails the suite.
 - **The navigation's HTTP status now reaches the classifier.** `page.goto()`

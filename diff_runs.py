@@ -20,7 +20,7 @@ Compare two andieswim-scraper runs by `sku` and report what moved.
                the two rows were read a different way — a listing row and a
                `--mode product` variant row populate different columns — so
                the difference is about our two snapshots rather than about
-               the product, and `--fail-on-change` ignores it (§8)
+               the product, and `--fail-on-change` ignores it
 
 **Three things make two runs incomparable, and all three are refused rather
 than diffed.** Each would otherwise produce a diff whose every line is an
@@ -99,7 +99,7 @@ TRACKED_FIELDS = (
 # Diffing one against the other would report every one of these as a change
 # and none of it would be about the store. When the two rows disagree on
 # `mode`, these are reported as `source_changed` rather than as changes —
-# this family's rule (§8: a difference that comes with a provenance
+# this family's rule (a difference that comes with a provenance
 # difference says something about our own two snapshots, not about the site).
 #
 # Note `sku` itself differs in KIND between the modes (a product id against a
@@ -289,7 +289,7 @@ def _check_comparable(args) -> bool:
     # The guard stays because a disagreement would mean the files were
     # produced differently — a code change, or a hand-edited file — and
     # diffing those compares two things made two ways. It is deliberately
-    # NOT deleted as dead code: unlike a policy constant nothing reads (§17),
+    # NOT deleted as dead code: unlike a policy constant nothing reads,
     # this one has a consumer and a condition, it just should never fire.
     sorts = {}
     for label, path in (("--old", args.old), ("--new", args.new)):

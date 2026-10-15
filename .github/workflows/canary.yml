@@ -9,16 +9,17 @@
 # and no challenge of any kind. A GitHub runner is a datacenter address too,
 # so this workflow re-measures that claim every morning.
 #
-# CLAUDE.md §11 says a canary that CANNOT pass must skip rather than fail,
-# because a check that is always red teaches everyone to ignore checks. The
-# other half of that rule applies here: **a canary that CAN pass without a
-# credential must never be gated on one**. If The store ever puts its
+# A canary that CAN pass without a credential must never be gated on one,
+# and every job here must end red when it did not really test the site:
+# a block (exit 3), no rows, a run that never reached the store, or a job
+# whose secret is missing. If The store ever puts its
 # catalogue behind a key or a bot manager, this badge goes red the next
 # morning and the README's claim is retested without anyone remembering to.
 #
-# The third job is the exception, and it is guarded: it exercises the PAID
-# path (the Scraping Browser API over CDP), which cannot run without a
-# secret, so it skips with a ::notice:: when none is set.
+# The third job exercises the PAID path (the Scraping Browser API over CDP),
+# which cannot run without a secret. Without one it FAILS with an ::error::
+# naming the secret rather than skipping green: a skipped job reads exactly
+# like a passing one on the badge.
 #
 #     gh secret set ANDIESWIM_CDP_ENDPOINT --repo 2scraper/andieswim-scraper
 #
@@ -41,7 +42,7 @@ env:
   # A collection holding ~180 products, run at a REDUCED page size so three
   # pages really is three pages.
   #
-  # §11 says the canary must request >=3 pages, because with one page
+  # The canary must request >=3 pages, because with one page
   # pagination is never exercised — which is exactly how a silent
   # single-page bug survived in a sibling repo. On this store that needs
   # `--limit`: the default 250 is Shopify's cap and most collections fit in
@@ -97,7 +98,8 @@ jobs:
                   4: "Zero products (exit 4). Either the category is empty "
                      "now, or the page shape moved and the parser is reading "
                      "nothing. Check the uploaded HTML dump.",
-                  5: "Remote API error (exit 5) — nothing was tested.",
+                  5: "No rows and the content was never obtained (exit 5): a "
+                     "timeout, a dead proxy or a remote API error.",
                   6: "Partial (exit 6): some pages came back and some did not.",
               }.get(code, "See the log."))
               sys.exit(1)
@@ -111,7 +113,7 @@ jobs:
               if not ok:
                   failures.append(f"{label}: {detail}")
 
-          # §20: fail on a parser failure BY NAME. "0 products" would send
+          # Fail on a parser failure BY NAME. "0 products" would send
           # whoever reads this red badge to check the URL, when the thing
           # that moved is the parser. This stop_reason means The store served
           # a page that links to products and we turned it into nothing.
@@ -128,12 +130,12 @@ jobs:
           want("no failed pages", not meta["pages_failed"],
                str(meta["pages_failed"]))
 
-          # 50 per page x 3 pages = 150 exactly: this store fills every page
-          # but the last to the requested limit, and pagination was measured
-          # NOT repeating (772 rows, 772 distinct handles over the whole
-          # catalogue). The floor sits a little below 150 so a handful of
-          # products being unpublished overnight cannot trip it.
-          want("row floor", len(rows) >= 140, f"{len(rows)} rows")
+          # 50 per page x 3 pages caps the run at 150. The floor tests the
+          # PARSER and pagination, not the size of the collection: rows on
+          # page 3 (asserted below) already mean pages 1-2 came back full,
+          # so 101 is the least a working run can produce. A floor near the
+          # cap would go red when the collection shrinks for the season.
+          want("row floor", len(rows) >= 101, f"{len(rows)} rows")
 
           # There is deliberately NO check on a site-stated result count.
           # This store publishes none, and the one count it does publish
@@ -217,12 +219,12 @@ jobs:
                         if 0 < (r.get("variants_available") or 0)
                              < (r.get("variants_total") or 0))
           print(f"partially available: {partial}/{len(rows)}")
-          want("some products are partially available", partial > 0,
-               "every product has every size in stock, which has not been "
-               "true on any measured run — the availability read has "
-               "probably broken")
+          # Stock, not the parser: a notice, never a failure.
+          if partial == 0:
+              print("::notice::every product has every size in stock; "
+                    "unusual, worth a look at the availability read")
 
-          # §4's guard: a was-price at or below its price is a negative
+          # A was-price at or below its price is a negative
           # discount on a product that is not discounted at all.
           bad = [r for r in rows
                  if r.get("original_price") is not None
@@ -405,24 +407,23 @@ jobs:
       # through job `env` and read in each step's `if`.
       HAVE_CDP: ${{ secrets.ANDIESWIM_CDP_ENDPOINT != '' }}
     steps:
-      - name: Explain the skip
+      - name: Missing secret
         if: env.HAVE_CDP != 'true'
         run: |
-          echo "::notice::Skipping the Scraping Browser run: no ANDIESWIM_CDP_ENDPOINT secret is set."
+          echo "::error::ANDIESWIM_CDP_ENDPOINT secret is not set, so the Scraping Browser path was NOT tested."
           echo "This job exercises the PAID path — the one that has no free"
-          echo "equivalent to fall back on, and therefore the one §16 says to"
-          echo "run before shipping, because credential-gated paths are the"
-          echo "paths nobody ran."
+          echo "equivalent to fall back on, and therefore the one worth"
+          echo "running before shipping, because credential-gated paths are"
+          echo "the paths nobody ran."
           echo
           echo "    gh secret set ANDIESWIM_CDP_ENDPOINT --repo 2scraper/andieswim-scraper"
           echo
-          echo "Note the listing and product canaries above need NO secret and"
-          echo "cover the parser end to end. Nothing is untested because this"
-          echo "job skipped — only the CDP transport is."
+          echo "Note the listing and product canaries need NO secret and cover"
+          echo "the parser end to end; what is untested is the CDP transport."
           echo
-          echo "Scraping Browser profile credentials expire in about a day, so"
-          echo "a scheduled job on this secret will rot between runs. Prefer"
-          echo "dispatching this workflow by hand when you want to check it."
+          echo "Scraping Browser profile credentials expire after a period that"
+          echo "varies; a 401 from this job means the secret needs refreshing."
+          exit 1
 
       - uses: actions/checkout@v4
         if: env.HAVE_CDP == 'true'
@@ -438,7 +439,7 @@ jobs:
           pip install -r requirements.txt -r requirements-playwright.txt
 
       # The credential goes through the ENVIRONMENT, never a --proxy/--cdp
-      # flag on a command line (§3, §11): env_config.py already reads exactly
+      # flag on a command line: env_config.py already reads exactly
       # this variable, and a secret in argv is readable by anything that can
       # run `ps`.
       - name: Run
@@ -473,7 +474,7 @@ jobs:
           # The marker check that matters on this path: 2Captcha's auto-solve
           # extension injects `cf-turnstile` into every page it loads, and a
           # repo that carried that marker would report this good page as
-          # blocked (§8, §19). This repo does not carry it — exit 0 here is
+          # blocked. This repo does not carry it — exit 0 here is
           # the proof, since a false positive would have been exit 3.
           print(f"{len(rows)} rows over the Scraping Browser, exit 0.")
           PY

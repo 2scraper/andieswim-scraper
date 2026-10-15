@@ -20,7 +20,7 @@ jobs:
         # The oldest and the NEWEST supported, not the oldest and a
         # convenient middle. The README's badge claimed 3.9-3.13 while CI
         # tested 3.9 and 3.12, so the newest end of the claim was untested —
-        # which is the same defect as claiming 3.9 without testing it (§11),
+        # which is the same defect as claiming 3.9 without testing it,
         # pointed at the other end of the range.
         python-version: ["3.9", "3.13"]
 
@@ -56,7 +56,7 @@ jobs:
 
       - name: Every CLI answers --help, and the sample output is real
         # BOTH of these were once INLINE reimplementations of checks that
-        # `.github/ci_checks.py` already implements — which is CLAUDE.md §17's
+        # `.github/ci_checks.py` already implements — which is the classic
         # "two sources of truth, one dead and one holed", and it bit on this
         # repo's very first CI run: the inline sample check still imported
         # `output_writer.Business`, a class this repo renamed, so the job died
