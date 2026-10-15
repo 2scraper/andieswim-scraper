@@ -59,6 +59,12 @@ release notes say so at the top.
 - **`.gitignore` missed real dump shapes**: `X.pageN` from `--dump-html`
   with `--pages`, a bare `dump.html` at the top level, and working
   directories such as `live/` and `out/`.
+- **The canary could end green without testing everything.** The Scraping
+  Browser job skipped with a notice when its secret was missing; it now
+  fails with an error naming `ANDIESWIM_CDP_ENDPOINT`. The listing floor
+  tests the parser (rows on all three pages) rather than sitting 10 rows
+  under the 150-row cap, and "some products are partially available" is a
+  notice, because it measures stock rather than the parser.
 - Wording: exit 5 is described as "no rows, the content was never obtained"
   everywhere; the "credentials expire in about a day" claim is removed (the
   lifetime varies); the market count reads 200 everywhere; internal
