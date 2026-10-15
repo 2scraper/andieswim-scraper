@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "andieswim-scraper"
-version = "0.1.0"
+version = "0.2.0"
 description = "Andie Swim (andieswim.com) scraper: collection listings, keyword lookups, and products with their full size/colour table."
 readme = "README.md"
 license = "MIT"

@@ -10,6 +10,8 @@ release notes say so at the top.
 
 ## [Unreleased]
 
+## [0.2.0] — 2026-10-15
+
 > **Behaviour change:** `--retries 0` is now a usage error (exit 2). It used
 > to be accepted and made the page-load loop unreachable, so nothing was
 > fetched and the engine reported the browser's own blank page as a result:
@@ -98,6 +100,34 @@ release notes say so at the top.
     reaches `throttled` through the edge's own body wording instead — one
     rung weaker, and the only rung it has.
 
+- **The Scraper API path (`scraper_api_client.py`) failed whenever a wait flag
+  was given, and never saw the target's status.** Measured 2026-09-23 against
+  the live `/tasks/sync` endpoint: `waitFor` sent as a JSON-encoded string
+  (what this client sent) is answered HTTP 422 "params.waitFor must be an
+  object" and is still billed ($0.0005); sent as an object it is answered
+  HTTP 200. It is now an object. And the response's `status` is the API's own
+  verdict ("success"), while the target site's HTTP code is `http_code` — the
+  client handed `status` onward, so a target 403/503 never reached the page
+  classifier. It now reads `http_code`, falling back to `status` only if that
+  is an integer. After the fix, one live call with `--wait-text` against the canary collection answered HTTP 200, upstream 200, 180 rows.
+
+- **Donor-repo leftovers removed.** `.gitignore` ignored `montblanc_products.*`
+  and `.dockerignore` excluded `bbb_businesses.*`; both now name this repo's
+  real default output prefix, `andieswim_products`.
+- The issue templates were Etsy's (DataDome advice, an etsy.com example URL,
+  a JSON-LD evidence recipe, a tile-overlay option). Rewritten for this store
+  from the README's own measurements.
+- `captcha_solver.py`'s module docstring and "what is not here" note described
+  BBB's Cloudflare gate as this site's. They now state what the README
+  measured here: only Shopify's form-submit captcha, nothing on the read path.
+- A few comments that said "on BBB" or "BBB has not been measured" as if BBB
+  were this site now name `bbb-scraper` as the sibling it is.
+
+- `SECURITY.md` said this project has no releases or version tags; it has
+  both. "Supported versions" now names the latest release and `main`.
+- `captcha_solver.py`'s docstring pointed at a "No DataDome solver" section
+  that does not exist in this repo (it came with the copied core). Removed.
+
 ### Changed
 
 - **Confirming a collection exists costs ONE request instead of five.** The
@@ -134,38 +164,6 @@ Reproduced here with `--dump-html`: the file is `{"collections":[]}`.
 
 Both defects it named are real and both are fixed above, which is the useful
 half. `--retries 0` itself is handled separately in #6.
-
-
-
-### Fixed
-
-- **The Scraper API path (`scraper_api_client.py`) failed whenever a wait flag
-  was given, and never saw the target's status.** Measured 2026-09-23 against
-  the live `/tasks/sync` endpoint: `waitFor` sent as a JSON-encoded string
-  (what this client sent) is answered HTTP 422 "params.waitFor must be an
-  object" and is still billed ($0.0005); sent as an object it is answered
-  HTTP 200. It is now an object. And the response's `status` is the API's own
-  verdict ("success"), while the target site's HTTP code is `http_code` — the
-  client handed `status` onward, so a target 403/503 never reached the page
-  classifier. It now reads `http_code`, falling back to `status` only if that
-  is an integer. After the fix, one live call with `--wait-text` against the canary collection answered HTTP 200, upstream 200, 180 rows.
-
-- **Donor-repo leftovers removed.** `.gitignore` ignored `montblanc_products.*`
-  and `.dockerignore` excluded `bbb_businesses.*`; both now name this repo's
-  real default output prefix, `andieswim_products`.
-- The issue templates were Etsy's (DataDome advice, an etsy.com example URL,
-  a JSON-LD evidence recipe, a tile-overlay option). Rewritten for this store
-  from the README's own measurements.
-- `captcha_solver.py`'s module docstring and "what is not here" note described
-  BBB's Cloudflare gate as this site's. They now state what the README
-  measured here: only Shopify's form-submit hCaptcha, nothing on the read path.
-- A few comments that said "on BBB" or "BBB has not been measured" as if BBB
-  were this site now name `bbb-scraper` as the sibling it is.
-
-- `SECURITY.md` said this project has no releases or version tags; it has
-  both. "Supported versions" now names the latest release and `main`.
-- `captcha_solver.py`'s docstring pointed at a "No DataDome solver" section
-  that does not exist in this repo (it came with the copied core). Removed.
 
 ## [0.1.0] — 2026-09-18
 
@@ -285,5 +283,6 @@ and a marker that matches every good page is worse than no marker.
   really is three pages: at the default 250 most collections fit in one
   request and pagination would never be exercised.
 
-[Unreleased]: https://github.com/2scraper/andieswim-scraper/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/2scraper/andieswim-scraper/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/2scraper/andieswim-scraper/releases/tag/v0.2.0
 [0.1.0]: https://github.com/2scraper/andieswim-scraper/releases/tag/v0.1.0
