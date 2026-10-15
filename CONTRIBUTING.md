@@ -248,7 +248,7 @@ rather than passing it the way an ordinary browser does.
 
 Also deliberately out of scope: **customer reviews**. The store carries them
 through a third party, and republishing a named person's words is a separate
-act from the store showing them on its own page (§10). There is no column for
+act from the store showing them on its own page. There is no column for
 them and adding one is a product decision rather than a bug fix.
 
 ## Licence

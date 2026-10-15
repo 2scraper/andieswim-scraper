@@ -9,7 +9,7 @@
 # and no challenge of any kind. A GitHub runner is a datacenter address too,
 # so this workflow re-measures that claim every morning.
 #
-# CLAUDE.md §11 says a canary that CANNOT pass must skip rather than fail,
+# A canary that CANNOT pass must skip rather than fail,
 # because a check that is always red teaches everyone to ignore checks. The
 # other half of that rule applies here: **a canary that CAN pass without a
 # credential must never be gated on one**. If The store ever puts its
@@ -41,7 +41,7 @@ env:
   # A collection holding ~180 products, run at a REDUCED page size so three
   # pages really is three pages.
   #
-  # §11 says the canary must request >=3 pages, because with one page
+  # The canary must request >=3 pages, because with one page
   # pagination is never exercised — which is exactly how a silent
   # single-page bug survived in a sibling repo. On this store that needs
   # `--limit`: the default 250 is Shopify's cap and most collections fit in
@@ -97,7 +97,8 @@ jobs:
                   4: "Zero products (exit 4). Either the category is empty "
                      "now, or the page shape moved and the parser is reading "
                      "nothing. Check the uploaded HTML dump.",
-                  5: "Remote API error (exit 5) — nothing was tested.",
+                  5: "No rows and the content was never obtained (exit 5): a "
+                     "timeout, a dead proxy or a remote API error.",
                   6: "Partial (exit 6): some pages came back and some did not.",
               }.get(code, "See the log."))
               sys.exit(1)
@@ -111,7 +112,7 @@ jobs:
               if not ok:
                   failures.append(f"{label}: {detail}")
 
-          # §20: fail on a parser failure BY NAME. "0 products" would send
+          # Fail on a parser failure BY NAME. "0 products" would send
           # whoever reads this red badge to check the URL, when the thing
           # that moved is the parser. This stop_reason means The store served
           # a page that links to products and we turned it into nothing.
@@ -222,7 +223,7 @@ jobs:
                "true on any measured run — the availability read has "
                "probably broken")
 
-          # §4's guard: a was-price at or below its price is a negative
+          # A was-price at or below its price is a negative
           # discount on a product that is not discounted at all.
           bad = [r for r in rows
                  if r.get("original_price") is not None
@@ -410,7 +411,7 @@ jobs:
         run: |
           echo "::notice::Skipping the Scraping Browser run: no ANDIESWIM_CDP_ENDPOINT secret is set."
           echo "This job exercises the PAID path — the one that has no free"
-          echo "equivalent to fall back on, and therefore the one §16 says to"
+          echo "equivalent to fall back on, and therefore the one worth"
           echo "run before shipping, because credential-gated paths are the"
           echo "paths nobody ran."
           echo
@@ -420,9 +421,8 @@ jobs:
           echo "cover the parser end to end. Nothing is untested because this"
           echo "job skipped — only the CDP transport is."
           echo
-          echo "Scraping Browser profile credentials expire in about a day, so"
-          echo "a scheduled job on this secret will rot between runs. Prefer"
-          echo "dispatching this workflow by hand when you want to check it."
+          echo "Scraping Browser profile credentials expire after a period that"
+          echo "varies; a 401 from this job means the secret needs refreshing."
 
       - uses: actions/checkout@v4
         if: env.HAVE_CDP == 'true'
@@ -438,7 +438,7 @@ jobs:
           pip install -r requirements.txt -r requirements-playwright.txt
 
       # The credential goes through the ENVIRONMENT, never a --proxy/--cdp
-      # flag on a command line (§3, §11): env_config.py already reads exactly
+      # flag on a command line: env_config.py already reads exactly
       # this variable, and a secret in argv is readable by anything that can
       # run `ps`.
       - name: Run
@@ -473,7 +473,7 @@ jobs:
           # The marker check that matters on this path: 2Captcha's auto-solve
           # extension injects `cf-turnstile` into every page it loads, and a
           # repo that carried that marker would report this good page as
-          # blocked (§8, §19). This repo does not carry it — exit 0 here is
+          # blocked. This repo does not carry it — exit 0 here is
           # the proof, since a false positive would have been exit 3.
           print(f"{len(rows)} rows over the Scraping Browser, exit 0.")
           PY

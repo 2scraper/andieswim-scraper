@@ -25,7 +25,7 @@ proxy, no key), against captures kept in ../captures/andieswim/:
 
 * A **product page publishes no Product JSON-LD.**  One `application/ld+json`
   block on `/products/the-amalfi-flat-black-classic`, and its `@type` is
-  `BreadcrumbList`.  CLAUDE.md §15 says count the blocks before writing
+  `BreadcrumbList`.  The rule is to count the blocks before writing
   either path; the count here is zero for products, so there is no
   structured-data path to write.
 
@@ -40,7 +40,7 @@ proxy, no key), against captures kept in ../captures/andieswim/:
       /collections.json?limit=250&page=N                     collection index
 
   Richer than any rendered tile: every variant with its own sku, price,
-  compare-at price and availability.  CLAUDE.md §21's rule — ask what the
+  compare-at price and availability.  The rule — ask what the
   front end calls before assuming a browser — answered the whole repo here.
 
 So the engines navigate to the ENDPOINT and this module parses the JSON.  The
@@ -68,7 +68,7 @@ the HTML route 404s.  So "no rows" cannot be read as "empty collection"
 without checking the handle exists.  `/collections/{handle}.json` answers
 that in one request — 200 with a `products_count`, or a 404 with zero bytes —
 which is why this repo distinguishes `unknown_collection` from `empty` in its
-stop reasons (§20).
+stop reasons.
 
 Options are not positional.  `variants[].option1/2/3` are commonly Color and
 Size, but the store also ships `Rate`, `Length`, `Quantity`, `SPF`,
@@ -88,7 +88,7 @@ Markets are path prefixes and the prices are SET per market, not converted.
 The site's own sitemap index lists **200** of them, all `en-xx`.  The same
 variant, 2026-09-18: 112.00 USD · 195.00 CAD · 110.00 GBP · 175.00 AUD ·
 130.00 EUR · 21600 JPY.  110 GBP is about 148 USD against a 112 USD list, so
-a cross-market comparison is pricing policy, not arbitrage (§20).  Join on
+a cross-market comparison is pricing policy, not arbitrage.  Join on
 `sku`, never on a label.
 
 An HTML page on this store is TIMING-DEPENDENT and a JSON endpoint is not.
@@ -108,7 +108,7 @@ prefix — a mapping this file would have to invent.  It is read from the
 site: `/products/{h}.json` publishes `variants[].price_currency`, and any
 HTML page on the market publishes `Shopify.currency = {"active":"GBP",...}`.
 The engines fetch one of those once per run and pass it in; a run that could
-not read one writes `currency: null` and says so (§8).
+not read one writes `currency: null` and says so.
 """
 
 import html as _html
@@ -122,7 +122,7 @@ from urllib.parse import (parse_qsl, quote, urlencode, urljoin, urlparse,
 from output_writer import Product
 
 # NOTE: no BeautifulSoup here, and the absence is deliberate rather than an
-# omission.  CLAUDE.md §4 makes `BeautifulSoup(html, "html.parser")` the
+# omission.  The family makes `BeautifulSoup(html, "html.parser")` the
 # family default, and the reason it does not apply is the shape of this site:
 # every field this repo publishes comes out of a JSON document, because a
 # collection page's HTML carries no grid and a product page's HTML carries no
@@ -154,12 +154,12 @@ CANONICAL_HOST = "andieswim.com"
 # that, two runs of the same collection would differ by a hostname in `url`
 # and every row would read as changed in a diff.
 #
-# CLAUDE.md §5 warns about the opposite case — a host that does NOT answer on
+# The family warns about the opposite case — a host that does NOT answer on
 # `www.` — which is not this site. Here it is the JOIN that matters, not
 # reachability.
 
 # The market prefixes, taken from the site's OWN sitemap index rather than
-# guessed or read off hreflang (§5).  Re-derive with:
+# guessed or read off hreflang.  Re-derive with:
 #
 #   curl -sS https://andieswim.com/sitemap.xml \
 #     | grep -o 'andieswim\.com/[a-z][a-z]-[a-z][a-z]/' \
@@ -168,7 +168,7 @@ CANONICAL_HOST = "andieswim.com"
 # 200 of them on 2026-09-18, every one `en-<cc>`: the store is English
 # everywhere and the prefix selects COUNTRY, which selects currency and
 # price.  The list is not hardcoded here because 200 two-letter pairs in a
-# source file is a table that rots (§13); the SHAPE is validated instead and
+# source file is a table that rots; the SHAPE is validated instead and
 # an unknown-but-well-formed market is accepted with a warning.
 _MARKET_RE = re.compile(r"^/(en-[a-z]{2})(?=/|$)")
 
@@ -241,10 +241,19 @@ def _with_market(path: str, market: Optional[str]) -> str:
     return "/" + market + ("" if bare == "/" else bare)
 
 
+def with_market(url: str, market: Optional[str]) -> str:
+    """`url` re-addressed to `market` (None or the default = the bare path)."""
+    from urllib.parse import urlsplit, urlunsplit
+    parts = urlsplit(url)
+    if market == DEFAULT_LOCALE:
+        market = None
+    return urlunsplit(parts._replace(path=_with_market(parts.path, market)))
+
+
 def is_supported_url(url: str) -> Tuple[bool, str]:
     """(supported, reason).  The reason is shown to the user verbatim.
 
-    Refusing WITH the reason matters (§5): "is not an Andie Swim site" would
+    Refusing WITH the reason matters: "is not an Andie Swim site" would
     be false for `andieswim.com/pages/about` and sends the reader hunting for
     a typo in a hostname that was correct.
     """
@@ -297,7 +306,7 @@ def handle_from_url(url: str) -> Optional[str]:
     """The product handle in a `/products/…` URL.
 
     Shopify's handle IS the id a reader can act on, and it is in the URL, so
-    there is no id-recovery regex to write beyond this (§5).  The numeric
+    there is no id-recovery regex to write beyond this.  The numeric
     product id is in the payload and is carried separately.
     """
     m = _PRODUCT_PATH_RE.match(_strip_market(urlparse(url or "").path))
@@ -355,7 +364,7 @@ def listing_endpoint(url: str, page: int = 1, limit: int = PAGE_SIZE) -> str:
     Query params on the human URL are DROPPED rather than forwarded.  The
     storefront JSON endpoint understands `limit` and `page` and nothing else:
     a `?sort_by=best-selling` carried over would be silently ignored, which
-    would put a `sort` in the sidecar that the fetch never applied (§8 — never
+    would put a `sort` in the sidecar that the fetch never applied (never
     present a guess as a fact).  `sort_from_url` reads it for reporting and
     `listing_sort_is_applied()` says plainly that it is not.
     """
@@ -391,7 +400,7 @@ def product_endpoint(url: str) -> str:
 
     Currency is not lost by choosing `.js`: the engines read it once per run
     from `Shopify.currency.active` on the market's own HTML, which is the
-    same fact one step further from the price (§4 rung 2 rather than rung 1)
+    same fact one step further from the price (a written code rather than structured data)
     and is what a listing run already relies on.
 
     The unit difference is the trap and it is handled in the parser rather
@@ -468,7 +477,7 @@ def parse_collection(text: str) -> Optional[Dict[str, Any]]:
     body, or anything else. It deliberately does NOT distinguish "absent"
     from "unreadable" on its own: the caller has the HTTP status, which is
     the signal that separates them, and inventing the distinction here would
-    be guessing from a shape (§8).
+    be guessing from a shape.
     """
     payload = load_payload(text)
     if not isinstance(payload, dict):
@@ -499,11 +508,11 @@ def product_json_endpoint(handle: str, market: Optional[str] = None) -> str:
     NOT what `--mode product` fetches: this document omits `available`
     entirely, which is the column that mode exists to produce (see
     `product_endpoint`). It is here because it is the one place the store
-    states a price's CURRENCY beside the price, which is §4's rung 1, and the
+    states a price's CURRENCY beside the price, which is the most trustworthy source, and the
     engines resolve a run's currency from it.
 
     Kept in this module rather than assembled in each engine: three copies of
-    a URL shape is exactly the drift §1 exists to prevent, and a currency
+    a URL shape is exactly the drift keeping site knowledge in one place prevents, and a currency
     read from a path one engine spelled differently is a silent wrong answer
     rather than a crash.
     """
@@ -545,12 +554,12 @@ def page_url(url: str, page_num: int, limit: int = PAGE_SIZE) -> str:
 
     The listing is genuinely addressable — page 2 of `one-pieces` is a
     different set from page 1 — which is what makes `--concurrency` legal
-    here (§7).  Verified on 2026-09-18: `/products.json?limit=250&page=1..4`
+    here.  Verified on 2026-09-18: `/products.json?limit=250&page=1..4`
     over the whole store returned 250 + 250 + 250 + 22 = 772 distinct
     handles, no repeats, page 5 empty.
 
     Note what this does NOT do: walking off the end is FREE on this site.
-    Page 5 answers 200 with `{"products":[]}` rather than the 500 bbb-scraper's site returns (§21), so
+    Page 5 answers 200 with `{"products":[]}` rather than the 500 bbb-scraper's site returns, so
     an overshoot costs a request and manufactures no error.  The terminating
     condition is therefore data — an empty array, or a page that added no new
     id — and never a selector.
@@ -594,7 +603,7 @@ def sort_from_url(url: str) -> Optional[str]:
 def listing_sort_is_applied(url: str) -> bool:
     """False whenever a `sort_by` was present: the endpoint ignores it.
 
-    Reported rather than silently dropped.  CLAUDE.md §21 makes ordering a
+    Reported rather than silently dropped.  Sibling repos make ordering a
     COLUMN because it decides WHICH rows are in a capped file; here nothing
     is capped — a listing run fetches every published product in the
     collection — so ordering decides `position` only, and two runs under
@@ -622,7 +631,7 @@ YER ZAR ZMW ZWL
 
 
 def is_currency_code(code: Optional[str]) -> bool:
-    """An allowlist, never a bare `[A-Z]{3}` (§4).
+    """An allowlist, never a bare `[A-Z]{3}`.
 
     Shopify publishes `price_currency` as a real code, so this is a guard
     against a malformed payload rather than against a size chart — but the
@@ -649,7 +658,7 @@ def is_currency_code(code: Optional[str]) -> bool:
 #
 # So currency is read from a JSON document instead (`payload_currency`
 # below), which runs no JavaScript, cannot be redirected that way, and is
-# §4 rung 1 rather than rung 2 — stated beside the price it belongs to.
+# Structured data rather than a written code — stated beside the price it belongs to.
 # A `page_currency()` reader was written, used, and then deleted rather than
 # left in place as a fallback: a second source that can disagree with the
 # first, silently, on a column whose whole job is to be trustworthy, is
@@ -659,7 +668,7 @@ def is_currency_code(code: Optional[str]) -> bool:
 def payload_currency(payload: Any) -> Optional[str]:
     """`variants[].price_currency` out of a `/products/{h}.json` document.
 
-    This is the trustworthy source (§4 rung 1): the site states it as a fact
+    This is the trustworthy source (structured data): the site states it as a fact
     beside the price it belongs to.
     """
     product = _as_product_object(payload)
@@ -683,7 +692,7 @@ def _money(value: Any) -> Optional[float]:
 
     The empty string is the one that bites: `float("")` raises, and a
     `.get(key, default)` never fires because the key is PRESENT.  Same shape
-    as §4's `"offers": null`.
+    as a JSON-LD `"offers": null`.
 
     Integers are NOT divided by 100 here.  Which shape a number is depends on
     which endpoint it came from, and the caller knows; guessing from
@@ -714,7 +723,7 @@ def _was_price(value: Any) -> Optional[float]:
     was-price of zero is a claim that the product used to be free, and it
     would also make `discount_pct` meaningless.
 
-    Same shape as the sibling repo's `rating: "" / ratingScore: 0.0` (§21):
+    Same shape as the sibling repo's `rating: "" / ratingScore: 0.0`:
     a numeric field whose absent state is 0 rather than null, where the
     absence has to be recovered rather than read.  Unlike that case this site
     publishes no "should I show this" flag, so zero is the only signal and it
@@ -742,7 +751,7 @@ def discount_pct(price: Optional[float],
     """Whole-percent discount, or None when the pair is not a discount.
 
     None rather than 0 or a negative when `original` is missing, equal, or
-    BELOW `price` (§4).  Shopify lets a merchant leave a stale
+    BELOW `price`.  Shopify lets a merchant leave a stale
     `compare_at_price` under the current price; read as a was-price that
     publishes a negative discount on a product that is not discounted at all.
     A canary assertion pins that no row carries an `original_price` at or
@@ -771,7 +780,7 @@ def load_payload(text: str) -> Optional[Any]:
 
     Returns None — never `{}` or `[]` — when the text is not the JSON this
     site serves.  A function returning an empty container on failure is this
-    codebase's most common historical bug class (§8): the caller cannot tell
+    codebase's most common historical bug class: the caller cannot tell
     "no products" from "we were handed a challenge page".
 
     Chromium's JSON viewer is the reason for the strip: even read through
@@ -832,7 +841,7 @@ def _products_in(payload: Any) -> Optional[List[Dict[str, Any]]]:
 
     None means "this is not a listing payload"; an empty LIST means "this
     listing has no products", and the two want different answers from the
-    caller (§20 — tell a broken parser apart from an empty category).
+    caller (tell a broken parser apart from an empty category).
     """
     if isinstance(payload, dict):
         if isinstance(payload.get("products"), list):
@@ -1042,7 +1051,7 @@ def _availability(product: Dict[str, Any]) -> Tuple[Optional[bool], int, int]:
 
     `in_stock` is True when ANY variant is available, which is what "can I
     buy this product" means.  It is genuinely a mixed column here rather than
-    a constant nobody has seen take its other value (§20): measured on
+    a constant nobody has seen take its other value: measured on
     one-pieces, 63 products had every size available, 116 had some, and 1
     has none.
 
@@ -1127,7 +1136,7 @@ def _variant_rows(product: Dict[str, Any], *, url: str,
     variant.  Verified unique within a run — 1137 of 1137 in one-pieces, 1487
     of 1487 in all-swimwear, and no SKU is shared between two different
     products across 665 products.  `diff_runs.py` refuses to compare a
-    `product` run against a `listing` run for that reason (§9).
+    `product` run against a `listing` run for that reason.
     """
     conv = _cents if cents else _money
     handle = _text(product.get("handle"))
@@ -1225,7 +1234,7 @@ def parse_products(text: str, base_url: str = "", *, page: int = 1,
     """Rows from a listing or search payload.
 
     REFUSES a single-product payload.  Calling the listing parser on a
-    product document is the §20 failure with the arrow reversed: here it
+    product document is the broken-parser failure with the arrow reversed: here it
     would not silently return a carousel, it would return one row whose
     `position` is 1 and whose page-level arithmetic is invented, so the run
     would look complete.  `smoke_test.py` pins both directions.
@@ -1249,7 +1258,7 @@ def parse_products(text: str, base_url: str = "", *, page: int = 1,
         if not _text(product.get("handle")):
             # Shopify has never served one of these in 665 measured products.
             # Skipping rather than emitting a row with no address, because a
-            # row whose `url` points at the collection is the §4 failure that
+            # row whose `url` points at the collection is the URL failure that
             # makes every row look right and point at the wrong page.
             continue
         rows.append(_row(product, url=base_url, market=market, mode=mode,
@@ -1356,7 +1365,7 @@ def payload_is_cents(payload: Any) -> bool:
 # ---------------------------------------------------------------------------
 
 # Vendor markers for an interstitial.  Counted on pages this store is KNOWN to
-# serve before any was added (§18), across the captures in
+# serve before any was added, across the captures in
 # ../captures/andieswim/:
 #
 #   marker                      served pages   refusals seen
@@ -1367,15 +1376,14 @@ def payload_is_cents(payload: Any) -> bool:
 # `cf-turnstile` is deliberately ABSENT.  It is the obvious marker for a
 # Turnstile and is measured useless in any repo that can reach the Scraping
 # Browser, whose auto-solve extension injects
-# `data-ts-input="cf-turnstile-response"` into every page it loads (§8, §19,
-# §21).  `challenges.cloudflare.com` is the one that works.
+# `data-ts-input="cf-turnstile-response"` into every page it loads.  `challenges.cloudflare.com` is the one that works.
 #
 # `hcaptcha` is likewise ABSENT, and this one is specific to this site: the
 # store ships Shopify's storefront-forms hCaptcha bundle
 # (`ce_storefront_forms_captcha_hcaptcha…iife.js`) on EVERY page it serves,
 # bound to form submits.  Counted: 1 occurrence on five of five served pages
 # and on zero refusals, because no refusal has ever been observed.  A marker
-# that fires on every good page is worse than no marker (§18) — it would make
+# that fires on every good page is worse than no marker — it would make
 # every successful run report exit 3.
 BOT_CHALLENGE_MARKERS = (
     ("challenges.cloudflare.com", "cloudflare"),
@@ -1389,8 +1397,7 @@ BOT_CHALLENGE_MARKERS = (
 )
 
 # An interstitial is not built out of the site's own assets; a page the store
-# served is (§8, proven again on tokopedia against Chromium's own error page,
-# §18).  `cdn.shopify.com` appears 18 times on a real collection page and 25
+# served is (proven again on tokopedia against Chromium's own error page).  `cdn.shopify.com` appears 18 times on a real collection page and 25
 # on the homepage; Chromium's network-error page carries the site's HOSTNAME
 # in its `<title>` and none of its assets, which is exactly the case a title
 # check gets wrong.
@@ -1408,7 +1415,7 @@ _UNESCAPE_PREFIX = 20_000
 def detect_bot_challenge(html: str, url: str = "") -> Optional[str]:
     """The vendor named by a marker in this document, or None.
 
-    Entities are normalised over a bounded prefix before matching (§20): an
+    Entities are normalised over a bounded prefix before matching: an
     edge can entity-escape the punctuation in its own refusal URL, so a
     literal marker matches a browser's DOM and silently misses the same page
     read by an HTTP client.  Bounded because a refusal page is a few hundred
@@ -1442,8 +1449,8 @@ def payload_is_listing(text: str) -> bool:
     """Whether this text is a listing payload the store served.
 
     The positive signal for a JSON route, and it is UNAMBIGUOUS where the
-    asset count is a heuristic — so it is checked first (§17's
-    classification-order trap).  An empty `{"products": []}` is a served
+    asset count is a heuristic — so it is checked first (order
+    signals by how much they prove, not by how cheap they are).  An empty `{"products": []}` is a served
     listing and returns True; it is empty, not blocked.
     """
     payload = load_payload(text)
@@ -1458,7 +1465,7 @@ def payload_is_product(text: str) -> bool:
 def product_link_count(html: str) -> int:
     """How many distinct product addresses this document names.
 
-    Used to tell a served-but-unparsed document from an empty one (§20): a
+    Used to tell a served-but-unparsed document from an empty one: a
     document that links to products and parses to zero rows is OUR bug, not
     an empty collection.
 
@@ -1508,7 +1515,7 @@ _NOT_FOUND_RE = re.compile(r'class="layout\s+layout--404\b'
 
 _REFUSAL_STATUSES = frozenset({401, 403, 407, 451})
 
-# A THROTTLE is not a refusal, and the two want opposite responses (§24): a
+# A THROTTLE is not a refusal, and the two want opposite responses: a
 # throttle wants a wait at the SAME exit, a refusal wants a different one.
 # Counting 429 as blocked spends the block budget and a rotation on a page
 # that was about to come back, and reports exit 3 to a reader who needs no
@@ -1533,7 +1540,7 @@ def detect_page_state(text: str, status: Optional[int] = None,
                       url: str = "") -> Tuple[str, Optional[str]]:
     """(state, detail) for whatever came back.
 
-    ORDERED BY HOW MUCH EACH SIGNAL PROVES, not by how cheap it is (§17).
+    ORDERED BY HOW MUCH EACH SIGNAL PROVES, not by how cheap it is.
     The unambiguous positive here is that the text IS one of this store's own
     JSON documents: nothing but Shopify serves `{"products": [...]}` at these
     addresses, and no interstitial or error page parses as one.  So that is
@@ -1566,7 +1573,7 @@ def detect_page_state(text: str, status: Optional[int] = None,
     #    out of the store's own assets like every other page) and the run
     #    reports a successfully-scraped empty collection.
     #
-    #    `layout--404` and `template--404`, counted per §18 before either was
+    #    `layout--404` and `template--404`, counted on a good page before either was
     #    added: 1 each on the 404 capture, 0 on the served collection page,
     #    which carries `layout--collection` in the same attribute.  The
     #    TEXT "not found" was rejected for this job — it appears once on the
@@ -1579,7 +1586,7 @@ def detect_page_state(text: str, status: Optional[int] = None,
         if status == 404:
             return "not_found", "HTTP 404"
         if status in _THROTTLE_STATUSES:
-            # Wait, do not rotate, and do not solve. §24: a throttle is the
+            # Wait, do not rotate, and do not solve. A throttle is the
             # one refusal whose right answer is patience at the same address.
             return "throttled", "HTTP %d" % status
         if status in _REFUSAL_STATUSES:
@@ -1600,7 +1607,7 @@ def detect_page_state(text: str, status: Optional[int] = None,
             return "throttled", marker
 
     # 5. A vendor marker.  Only consulted once the positive signals have
-    #    failed (§18): running it earlier lets it fire on a page the store
+    #    failed: running it earlier lets it fire on a page the store
     #    plainly served and turn a correct answer into exit 3.
     vendor = detect_bot_challenge(text, url)
     if vendor:
@@ -1610,7 +1617,7 @@ def detect_page_state(text: str, status: Optional[int] = None,
     #    store served — it just is not one of the JSON routes.  That is the
     #    `--mode product` HTML capture, and it is also what tells Chromium's
     #    own network-error page (which carries the site's HOSTNAME in its
-    #    title and none of its assets) apart from a real one (§18).
+    #    title and none of its assets) apart from a real one.
     if text.strip().startswith("<"):
         if looks_like_a_served_page(text):
             return "content", "html page"
