@@ -10,6 +10,12 @@ release notes say so at the top.
 
 ## [Unreleased]
 
+### Changed
+
+- CI only: the canary's paid `scraping-browser` job now runs weekly (Mondays
+  05:40 UTC) and on a manual dispatch; the free `listing` and `product` jobs
+  still run daily.
+
 ## [0.2.0] — 2026-10-15
 
 > **Behaviour change:** `--retries 0` is now a usage error (exit 2). It used
