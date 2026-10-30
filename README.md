@@ -1,4 +1,4 @@
-# andieswim-scraper
+# Andie Swim Scraper — Collections, Prices and Per-Size Stock in Python
 
 [![release](https://img.shields.io/github/v/release/2scraper/andieswim-scraper?sort=semver)](https://github.com/2scraper/andieswim-scraper/releases)
 [![tests](https://github.com/2scraper/andieswim-scraper/actions/workflows/tests.yml/badge.svg)](https://github.com/2scraper/andieswim-scraper/actions/workflows/tests.yml)
@@ -7,6 +7,8 @@
 [![licence](https://img.shields.io/badge/licence-MIT-green)](LICENSE)
 [![engines](https://img.shields.io/badge/engines-Playwright%20%7C%20Selenium%20%7C%20Puppeteer%20%7C%20Scraping%20Browser%20API-lightgrey)](#engines)
 [![runs without an account](https://img.shields.io/badge/runs%20without%20an%20account-yes-brightgreen)](#do-you-need-any-of-the-paid-products)
+
+**Andie Swim scraper** — an open-source (MIT) Python tool that reads andieswim.com collection listings, keyword lookups and product pages and writes sizes, prices, was-prices and which sizes are in stock to JSON or CSV. Measured on 2026-09-18 from an ordinary datacenter address, nothing on the read path was gated: no key, no proxy and no browser fingerprint were needed. Use it to track prices and per-size availability, or compare two runs with `diff_runs.py`.
 
 Scrapes **[andieswim.com](https://andieswim.com)** (Andie Swim): collection
 listings, keyword lookups, and single products with their full size/colour
@@ -317,6 +319,23 @@ pytest                          # the same checks, wrapped
 
 Fixtures are cut from real captures and each was verified to parse to
 identical values to its untrimmed original before being committed.
+
+## Guides
+
+- [How to run the 2scraper scrapers: setup, proxies, exit codes and access modes](https://2captcha.com/h/how-to-run-2scraper-open-source-scrapers) — installation, `.env`, `.meta.json` for the whole family.
+
+## Related scrapers
+
+Same CLI conventions, same output contract (one row per item, JSON or CSV, a `.meta.json` sidecar and shared exit codes):
+
+- [Bershka scraper](https://github.com/2scraper/bershka-scraper) — Every SKU in a Bershka category
+- [Catawiki scraper](https://github.com/2scraper/catawiki-scraper) — Auction lots, bids, reserves, estimates and sellers…
+- [Etsy scraper](https://github.com/2scraper/etsy-scraper) — Search, category, shop and listing pages as JSON or CSV…
+- [Farfetch scraper](https://github.com/2scraper/farfetch-scraper) — Luxury fashion listings and per-size product data…
+- [Givenchy Beauty scraper](https://github.com/2scraper/givenchy-scraper) — Products, prices and shades across 11 storefront locales
+- [Home Depot scraper](https://github.com/2scraper/homedepot-scraper) — Per-store prices, stock, brands, models and ratings…
+
+All scrapers: [github.com/2scraper](https://github.com/2scraper) · Need another site? [Open a request](https://github.com/2scraper/.github/issues/new?title=%5BScraper%20request%5D%20)
 
 ## Licence
 
